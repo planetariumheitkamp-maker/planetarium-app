@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Planetarium Box Office</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;900&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family:'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background:#0a0514; color:#fff; -webkit-font-smoothing: antialiased; min-height: 100vh; display:flex; flex-direction:column; overflow-x: hidden; }
+    
+    /* Starry Background CSS */
+    .bg-stars { position:fixed; inset:0; z-index:-1; background:radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%); overflow:hidden; }
+    .star { position:absolute; background:#fff; border-radius:50%; animation:twinkle infinite alternate; }
+    @keyframes twinkle { 0% {opacity:0.3;} 100% {opacity:1; transform:scale(1.2);} }
+
+    header { padding:30px 20px; text-align:center; background:rgba(10, 5, 20, 0.8); backdrop-filter:blur(10px); border-bottom:1px solid rgba(255,255,255,0.05); position:sticky; top:0; z-index:50;}
+    h1 { font-family:'Orbitron', monospace; font-size:24px; color:#D1B888; letter-spacing:2px; }
+    header p { color:#a996cc; font-size:14px; margin-top:5px; }
+
+    .container { max-width:600px; margin:0 auto; padding:20px; flex:1; width:100%; }
+    
+    .view { display:none; animation:fadeIn 0.4s ease; }
+    .view.active { display:block; }
+    @keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+
+    /* Event Cards */
+    .show-card { background:rgba(43, 29, 82, 0.6); border:1px solid rgba(209, 184, 136, 0.2); border-radius:16px; padding:20px; margin-bottom:16px; backdrop-filter:blur(10px); transition:transform 0.2s; position:relative; overflow:hidden;}
+    .show-card:active { transform:scale(0.98); }
+    .show-title { font-size:20px; font-weight:700; color:#fff; margin-bottom:8px; padding-right:60px;}
+    .show-details { color:#b0a3c9; font-size:14px; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
+    
+    .capacity-badge { position:absolute; top:20px; right:20px; background:rgba(209, 184, 136, 0.1); color:#D1B888; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:700; border:1px solid rgba(209, 184, 136, 0.3);}
+    .capacity-badge.sold-out { background:rgba(255, 71, 87, 0.1); color:#ff4757; border-color:rgba(255, 71, 87, 0.3);}
+
+    .btn { display:block; width:100%; padding:14px; margin-top:16px; background:#D1B888; color:#1c1336; text-align:center; border:none; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; text-decoration:none; transition:transform 0.1s; }
+    .btn:active { transform:scale(0.98); }
+    .btn-outline { background:transparent; border:2px solid #D1B888; color:#D1B888; }
+    
+    /* Booking Form Modal */
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); display:flex; align-items:flex-end; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.3s; z-index:100; }
+    .modal-bg.open { opacity:1; pointer-events:all; }
+    .modal { background:#1e1e24; width:100%; max-width:600px; border-radius:24px 24px 0 0; padding:30px 20px; transform:translateY(100%); transition:transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .modal-bg.open .modal { transform:translateY(0); }
+    
+    .form-group { margin-bottom:16px; }
+    .form-group label { display:block; font-size:12px; color:#a996cc; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px; }
+    .form-group input { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:14px; border-radius:10px; font-size:16px; outline:none; }
+    .form-group input:focus { border-color:#D1B888; }
+    
+    /* MULTI-TICKET CAROUSEL CSS */
+    .ticket-slide { display: none; animation: slideIn 0.3s ease; width:100%; }
+    .ticket-slide.active { display: block; }
+    @keyframes slideIn { from {opacity:0; transform:scale(0.95);} to {opacity:1; transform:scale(1);} }
+
+    .ticket-box { background:#fff; border-radius:20px; padding:30px 20px; text-align:center; color:#111; box-shadow:0 10px 40px rgba(0,0,0,0.5); position:relative; overflow:hidden; width:100%; }
+    .ticket-box::before, .ticket-box::after { content:''; position:absolute; top:45%; width:30px; height:30px; background:#0a0514; border-radius:50%; transform:translateY(-50%); }
+    .ticket-box::before { left:-15px; }
+    .ticket-box::after { right:-15px; }
+    .ticket-divider { border-top: 2px dashed #ccc; margin: 20px 0; position:relative; top:-10px;}
+    
+    .qr-container { background:#fff; padding:10px; border-radius:10px; display:inline-block; margin-bottom:20px; border:4px solid #f4f4f4;}
+    .qr-container img, .qr-container canvas { width:180px; height:180px; display:block; margin:0 auto; }
+
+    /* Carousel Navigation Controls */
+    .nav-btn { background:rgba(209, 184, 136, 0.1); border:1px solid #D1B888; color:#D1B888; border-radius:50%; width:36px; height:36px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0;}
+    .nav-btn:active { background:#D1B888; color:#0a0514; }
+    .nav-dots { display:flex; gap:8px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,0.2); transition:background 0.3s;}
+    .dot.active { background:#D1B888; }
+
+    .loader { border:4px solid rgba(209, 184, 136, 0.2); border-top:4px solid #D1B888; border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; margin:40px auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="bg-stars" id="star-bg"></div>
+
+<header>
+    <h1>HEITKAMP PLANETARIUM</h1>
+    <p>Public Box Office & Ticketing</p>
+</header>
+
+<div class="container">
+    
+    <div id="loading" class="view active">
+        <div class="loader"></div>
+        <p style="text-align:center; color:#a996cc; font-size:14px;">Syncing live schedule...</p>
+    </div>
+
+    <div id="storefront" class="view">
+        <h2 style="font-size:18px; margin-bottom:20px; color:#D1B888; font-family:'Orbitron', monospace;">UPCOMING SHOWS</h2>
+        <div id="shows-list"></div>
+    </div>
+
+    <div id="ticket-view" class="view">
+        
+        <div id="grouping-controls" style="display:none; text-align:center; margin-bottom:20px; background:rgba(43,29,82,0.6); padding:12px; border-radius:12px; border:1px solid rgba(209,184,136,0.3);">
+            <label style="font-size:12px; color:#D1B888; font-weight:700; margin-right:8px; text-transform:uppercase;">Display Tickets:</label>
+            <select id="group-select" onchange="renderTicketWallet()" style="background:rgba(0,0,0,0.5); color:#fff; border:1px solid #D1B888; padding:6px 12px; border-radius:8px; outline:none; font-family:'Outfit'; font-size:14px;">
+                </select>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:15px;">
+            <button class="nav-btn" onclick="changeTicket(-1)" id="nav-left" style="visibility:hidden;">&#10094;</button>
+            
+            <div id="ticket-carousel" style="flex:1; position:relative; min-width:0;"></div>
+
+            <button class="nav-btn" onclick="changeTicket(1)" id="nav-right" style="visibility:hidden;">&#10095;</button>
+        </div>
+
+        <div class="nav-dots" id="carousel-dots" style="justify-content:center; margin-top:20px; display:none;"></div>
+
+        <p style="color:#a996cc; font-size:13px; text-align:center; margin-top:16px;" id="swipe-hint">Present to staff. Swipe to view other tickets.</p>
+
+        <button class="btn btn-outline" style="margin-top:30px;" onclick="window.location.href=window.location.pathname">Browse More Shows</button>
+    </div>
+
+</div>
+
+<div class="modal-bg" id="bookingModal">
+    <div class="modal">
+        <h3 style="font-size:22px; margin-bottom:4px; color:#D1B888;" id="book-title">Reserve Tickets</h3>
+        <p style="color:#a996cc; font-size:14px; margin-bottom:24px;" id="book-time">Date & Time</p>
+        
+        <input type="hidden" id="book-id">
+        <input type="hidden" id="book-max">
+        
+        <div style="display:flex; gap:16px;">
+            <div class="form-group" style="flex:2;">
+                <label>Full Name</label>
+                <input type="text" id="bName" placeholder="e.g. Jane Doe">
+            </div>
+            <div class="form-group" style="flex:1;">
+                <label>Seats</label>
+                <input type="number" id="bCount" min="1" value="1" style="text-align:center; font-weight:bold;">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="bEmail" placeholder="Where we send the tickets">
+        </div>
+        
+        <div style="display:flex; gap:12px; margin-top:30px;">
+            <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('bookingModal').classList.remove('open')">Cancel</button>
+            <button class="btn" style="flex:1.5;" onclick="submitBooking()">Confirm Reservation</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==========================================
+// 🔴 IMPORTANT: Paste your Web App URL here
+const API_URL = "https://script.google.com/macros/s/AKfycbw7GQnyrXLpjwT_Q4mWTmyZzdmIdlMydQkyXxU_LIdoPY7eDJUaVMmPGUQ0YQ6yl_ozQQ/exec"; 
+// ==========================================
+
+let publicShows = [];
+let ticketDataGlobal = {};
+let currentTicketIndex = 0;
+let slidesCount = 1;
+
+let touchstartX = 0;
+let touchendX = 0;
+
+function formatEventDate(rawDate) {
+    if(!rawDate) return 'TBD';
+    const dateStr = String(rawDate).split('T')[0];
+    let d;
+    if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if(parts.length === 3) d = new Date(parts[2], parts[0]-1, parts[1]);
+    } else if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if(parts.length === 3) d = new Date(parts[0], parts[1]-1, parts[2]);
+    }
+    if (d && !isNaN(d.getTime())) return d.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' });
+    return dateStr; 
+}
+
+function formatTime(timeStr) {
+    if(!timeStr) return 'TBD';
+    const [h, m] = timeStr.split(':');
+    if(!h || !m) return timeStr;
+    const hh = parseInt(h);
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh % 12 || 12;
+    return `${h12}:${m} ${ampm}`;
+}
+
+const starBg = document.getElementById('star-bg');
+for(let i=0; i<50; i++) {
+    let star = document.createElement('div');
+    star.className = 'star';
+    star.style.width = Math.random() * 3 + 'px'; star.style.height = star.style.width;
+    star.style.left = Math.random() * 100 + 'vw'; star.style.top = Math.random() * 100 + 'vh';
+    star.style.animationDuration = (Math.random() * 3 + 1) + 's'; star.style.animationDelay = (Math.random() * 2) + 's';
+    starBg.appendChild(star);
+}
+
+window.onload = async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    ticketDataGlobal = {
+        id: urlParams.get('ticket'),
+        name: urlParams.get('name') || "Guest",
+        title: urlParams.get('title') || "Planetarium Show",
+        date: urlParams.get('date') || "TBD",
+        count: parseInt(urlParams.get('count')) || 1
+    };
+
+    if (ticketDataGlobal.id) {
+        setupGroupingDropdown();
+        renderTicketWallet();
+        setupSwipeListeners();
+        
+        document.getElementById('loading').classList.remove('active');
+        document.getElementById('ticket-view').classList.add('active');
+        return; 
+    }
+
+    try {
+        if(API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
+            document.getElementById('shows-list').innerHTML = "<p style='color:#ff4757; text-align:center; background:rgba(255,0,0,0.1); padding:20px; border-radius:12px;'>API URL NOT SET.</p>";
+            document.getElementById('loading').classList.remove('active');
+            document.getElementById('storefront').classList.add('active');
+            return;
+        }
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        publicShows = (data.events || []).sort((a,b) => new Date(a.date) - new Date(b.date));
+        renderShows();
+    } catch(err) {
+        document.getElementById('shows-list').innerHTML = "<p style='text-align:center; color:#ff4757;'>Unable to load schedule.</p>";
+    }
+    
+    document.getElementById('loading').classList.remove('active');
+    document.getElementById('storefront').classList.add('active');
+};
+
+function renderShows() {
+    const list = document.getElementById('shows-list');
+    if(publicShows.length === 0) {
+        list.innerHTML = "<p style='color:#a996cc; text-align:center; padding:40px 20px; background:rgba(255,255,255,0.05); border-radius:16px;'>No public shows are currently scheduled. Check back soon!</p>";
+        return;
+    }
+
+    // 🚨 NEW: Pull any reservations made locally on this device
+    let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
+
+    list.innerHTML = publicShows.map(show => {
+        // Calculate true availability (Max - Scanned at door - Reserved locally right now)
+        const deviceReserved = localBookings[show.id] || 0;
+        const available = show.max - (show.scanned || 0) - deviceReserved;
+        
+        let badgeHTML = `<div class="capacity-badge">${available} Seats Left</div>`;
+        if (available <= 0) badgeHTML = `<div class="capacity-badge sold-out">SOLD OUT</div>`;
+
+        return `
+        <div class="show-card">
+            ${badgeHTML}
+            <div class="show-title">${show.title}</div>
+            <div class="show-details">📅 ${formatEventDate(show.date)}</div>
+            <div class="show-details">🕒 ${formatTime(show.time)}</div>
+            <div class="show-details">📍 ${show.location}</div>
+            
+            ${available > 0 ? `<button class="btn btn-small" style="margin-top:20px;" onclick="openBooking(${show.id}, ${available})">Reserve Tickets</button>` : `<button class="btn btn-small btn-outline" style="margin-top:20px; opacity:0.5; cursor:not-allowed;" disabled>Sold Out</button>`}
+        </div>`;
+    }).join('');
+}
+
+function openBooking(id, availableSeats) {
+    const show = publicShows.find(s => s.id == id);
+    if(!show) return;
+    
+    document.getElementById('book-id').value = show.id;
+    document.getElementById('book-max').value = availableSeats; 
+    document.getElementById('bCount').value = 1; 
+    document.getElementById('bCount').max = availableSeats; 
+
+    document.getElementById('book-title').textContent = show.title;
+    document.getElementById('book-time').textContent = `${formatEventDate(show.date)} @ ${formatTime(show.time)}`;
+    document.getElementById('bookingModal').classList.add('open');
+}
+
+async function submitBooking() {
+    const evId = document.getElementById('book-id').value;
+    const maxAllowed = parseInt(document.getElementById('book-max').value);
+    const name = document.getElementById('bName').value;
+    const email = document.getElementById('bEmail').value;
+    const count = parseInt(document.getElementById('bCount').value);
+
+    if(!name || !email) { alert("Please fill out your name and email."); return; }
+    if(count < 1 || count > maxAllowed) { alert(`Please select a valid number of seats (1 to ${maxAllowed}).`); return; }
+    
+    const show = publicShows.find(s => s.id == evId);
+    document.getElementById('bookingModal').classList.remove('open');
+
+    // 1. SAVE LOCALLY (Temporary UI update)
+    let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
+    localBookings[evId] = (localBookings[evId] || 0) + count;
+    localStorage.setItem('planetarium_bookings', JSON.stringify(localBookings));
+
+    // 2. SYNC TO CLOUD
+    try {
+        if(API_URL !== "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
+            // Prepare payload for automated email and seat update
+            const payload = {
+                action: 'reserve_seats',
+                eventId: evId,
+                count: count,
+                publicAppUrl: window.location.href.split('?')[0],
+                emailData: {
+                    name: name,
+                    email: email,
+                    showTitle: show.title,
+                    showDate: `${formatEventDate(show.date)} @ ${formatTime(show.time)}`
+                }
+            };
+
+            // We await this now to ensure the cloud is updated before we refresh
+            await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            
+            // 3. CLEAR LOCAL STORAGE (Cloud is now the "source of truth")
+            // This prevents double-counting after the refresh
+            localBookings[evId] = 0;
+            localStorage.setItem('planetarium_bookings', JSON.stringify(localBookings));
+            
+            alert(`Reservation complete! Tickets sent to ${email}.`);
+            window.location.reload(); 
+        }
+    } catch(e) {
+        alert("Reservation confirmed locally, but cloud sync failed.");
+    }
+}
+
+// ============================================================================
+// CAROUSEL & GROUPING LOGIC
+// ============================================================================
+
+function setupGroupingDropdown() {
+    if(ticketDataGlobal.count <= 1) return;
+    const select = document.getElementById('group-select');
+    let html = `<option value="1">1 at a time</option>`;
+    
+    for(let i=2; i<=ticketDataGlobal.count; i++) {
+        if(i <= 5 || i === ticketDataGlobal.count) { 
+            html += `<option value="${i}">${i} at a time</option>`;
+        }
+    }
+    select.innerHTML = html;
+    document.getElementById('grouping-controls').style.display = 'block';
+}
+
+function renderTicketWallet() {
+    const groupSize = parseInt(document.getElementById('group-select')?.value || 1);
+    const { id, name, title, date, count } = ticketDataGlobal;
+    const container = document.getElementById('ticket-carousel');
+    let html = '';
+
+    // Calculate chunks based on groupSize dropdown
+    const chunks = [];
+    let remaining = count;
+    while(remaining > 0) {
+        let chunk = Math.min(groupSize, remaining);
+        chunks.push(chunk);
+        remaining -= chunk;
+    }
+    
+    slidesCount = chunks.length;
+    currentTicketIndex = 0;
+
+    chunks.forEach((chunkSize, index) => {
+        const isGroup = chunkSize > 1;
+        const admitText = isGroup ? `ADMIT ${chunkSize}` : `ADMIT ONE`;
+        const headerColor = isGroup ? `#2ed573` : `#442D7D`;
+
+        html += `
+        <div class="ticket-slide ${index === 0 ? 'active' : ''}" id="slide-${index}">
+            <div class="ticket-box">
+                <h2 style="font-family:'Orbitron', monospace; color:${headerColor}; font-size:24px; letter-spacing:2px;">${admitText}</h2>
+                <p style="color:#888; font-size:12px; margin-top:4px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Heitkamp Planetarium</p>
+                
+                <div style="height:30px;"></div>
+                <div class="ticket-divider"></div>
+                
+                <div class="qr-container" id="qr-code-${index}"></div>
+                
+                <h3 style="font-size:22px; font-weight:700; margin-bottom:8px; line-height:1.2;">${title}</h3>
+                <p style="color:#442D7D; font-weight:700; font-size:15px;">${date}</p>
+                <p style="color:#888; font-size:13px; margin-top:20px; background:#f4f4f4; padding:10px; border-radius:8px;">Reserved under: <span style="font-weight:700; color:#111;">${name}</span></p>
+            </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+
+    // Render exact QR Codes
+    chunks.forEach((chunkSize, index) => {
+        // TICKET|ID|GROUP|SIZE or standard TICKET|ID|SINGLE|INDEX
+        const qrText = chunkSize > 1 ? `TICKET|${id}|GROUP|${chunkSize}` : `TICKET|${id}|SINGLE|${index+1}`; 
+        new QRCode(document.getElementById(`qr-code-${index}`), {
+            text: qrText, width: 180, height: 180, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H
+        });
+    });
+
+    updateNavUI();
+}
+
+function updateNavUI() {
+    const dotsContainer = document.getElementById('carousel-dots');
+    const btnL = document.getElementById('nav-left');
+    const btnR = document.getElementById('nav-right');
+    const hint = document.getElementById('swipe-hint');
+    
+    if (slidesCount > 1) {
+        btnL.style.visibility = 'visible'; btnR.style.visibility = 'visible';
+        dotsContainer.style.display = 'flex';
+        hint.style.display = 'block';
+        
+        let dotsHTML = '';
+        for(let i=0; i<slidesCount; i++) { dotsHTML += `<div class="dot ${i === 0 ? 'active' : ''}" id="dot-${i}"></div>`; }
+        dotsContainer.innerHTML = dotsHTML;
+    } else {
+        btnL.style.visibility = 'hidden'; btnR.style.visibility = 'hidden';
+        dotsContainer.style.display = 'none';
+        hint.style.display = 'none';
+    }
+}
+
+function changeTicket(direction) {
+    if(slidesCount <= 1) return;
+    document.getElementById(`slide-${currentTicketIndex}`).classList.remove('active');
+    document.getElementById(`dot-${currentTicketIndex}`).classList.remove('active');
+
+    currentTicketIndex = (currentTicketIndex + direction + slidesCount) % slidesCount;
+
+    document.getElementById(`slide-${currentTicketIndex}`).classList.add('active');
+    document.getElementById(`dot-${currentTicketIndex}`).classList.add('active');
+}
+
+function setupSwipeListeners() {
+    const ticketView = document.getElementById('ticket-view');
+    ticketView.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; }, {passive: true});
+    ticketView.addEventListener('touchend', e => {
+        touchendX = e.changedTouches[0].screenX;
+        if(slidesCount > 1) {
+            if (touchendX < touchstartX - 50) changeTicket(1);
+            if (touchendX > touchstartX + 50) changeTicket(-1);
+        }
+    }, {passive: true});
+}
+</script>
+</body>
+</html>
