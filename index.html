@@ -43,9 +43,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 
 /* 3D ENTRY SPLASH */
 #solar {
-    /* Replace 'your-background.jpg' with your actual filename */
-    background: url('bg.jpg') no-repeat center center;
-    background-size: cover; 
+    background: none; /* Remove the static CSS background */
     z-index: 50;
     position: fixed;
     inset: 0;
@@ -419,6 +417,7 @@ const atmosphereFragmentShader = `varying vec3 vNormal; uniform vec3 glowColor; 
 
 function init3D() {
     const container = document.getElementById('three-container');
+    let backgroundMesh; // Define this globally
     scene = new THREE.Scene(); 
     camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
     // Check if the screen is narrow (mobile)
@@ -459,7 +458,16 @@ camera.position.set(0, cameraY, cameraZ);
     earthGroup = new THREE.Group();
     scene.add(earthGroup);
 
-    const texLoader = new THREE.TextureLoader();
+  
+    const loader = new THREE.TextureLoader();
+    loader.load('bg.jpg', function(texture) {
+    const bgGeometry = new THREE.PlaneGeometry(150, 100); // Adjust size to fill screen
+    const bgMaterial = new THREE.MeshBasicMaterial({ map: texture });
+    backgroundMesh = new THREE.Mesh(bgGeometry, bgMaterial);
+    
+    backgroundMesh.position.set(0, 0, -50); // Keep it behind the planet
+    scene.add(backgroundMesh);
+});
     const currentPlanet = PLANET_OPTIONS[Math.floor(Math.random() * PLANET_OPTIONS.length)];
 
     const planetGeo = new THREE.SphereGeometry(10, 64, 64);
@@ -534,6 +542,11 @@ function onWindowResize() {
 function animate() { 
     requestAnimationFrame(animate); 
     if(planetMesh) planetMesh.rotation.y += 0.002;
+    if (backgroundMesh) {
+        // We multiply by a very small number (0.02) so it moves slower than the planet
+        backgroundMesh.position.x = mouseX * 0.02;
+        backgroundMesh.position.y = -mouseY * 0.02;
+    }
     if(clouds) clouds.rotation.y += 0.0025; 
     if(stars) stars.rotation.y += 0.0002;
     moonData.forEach(m => { m.pivot.rotation.y -= m.speed; m.mesh.rotation.y += 0.005; });
