@@ -18,17 +18,36 @@
 *{margin:0;padding:0;box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
 :root{
   --bg-main: #F4F4F4; --surface: #442D7D; --surface2: #5c3c9e; --surface3: #321c63; 
-  --text-dark: #442D7D; --text-light: #F4F4F4; --muted-dark: #7a65a8; --muted-light: #b0a3c9;
+  --text-dark: #7a65a8; --text-light: #F4F4F4; --muted-dark: #7a65a8; --muted-light: #b0a3c9;
   --accent: #D1B888;  --font: 'Outfit', sans-serif; --display: 'Orbitron', monospace;
   --success: #2ed573; --danger: #ff4757; --warning: #ffa502;
   --card-bg: #ffffff; --border-light: rgba(68, 45, 125, 0.08); --nav-active: var(--surface);
+  /* Force the Session Timer to be visible in dark mode */
+body.dark-mode #sessionTimeDisplay {
+    color: var(--text-light) !important;
+}
+/* Force the Topic/Role text to be readable in dark mode */
+body.dark-mode .staff-role {
+    color: var(--muted-light); 
+}
+/* Force the '0.00 hrs' stats to be readable in dark mode */
+body.dark-mode span[style*="color:var(--surface)"] {
+    color: var(--text-light) !important;
+}
 }
 
 /* DARK MODE THEME VARIABLES */
 body.dark-mode {
   --bg-main: #121212; --surface: #2b1d52; --surface2: #3c2a6e; --surface3: #1c1336; 
-  --text-dark: #F4F4F4; --text-light: #F4F4F4; --muted-dark: #a996cc; --muted-light: #6c5991;
+  --text-dark: #F4F4F4; --text-light: #F4F4F4; --muted-dark: #a996cc; --muted-light: #b0a3c9;
   --card-bg: #1e1e24; --border-light: rgba(255,255,255,0.1); --nav-active: var(--accent);
+  /* Force labels and roles to use the readable lavender in dark mode */
+body.dark-mode label, 
+body.dark-mode .role, 
+body.dark-mode .topic,
+body.dark-mode .subtitle {
+    color: var(--muted-light); 
+}
 }
 
 html,body{height:100%; width:100%; overflow:hidden; font-family:var(--font); background:var(--bg-main); color:var(--text-dark); -webkit-font-smoothing: antialiased;}
@@ -63,7 +82,13 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
 /* APP LAYOUT */
-#worker{flex-direction:column; background:var(--bg-main);}
+#worker {
+    flex-direction: column; 
+    background: var(--bg-main);
+    align-items: stretch;       /* Forces the content to stretch side-to-side */
+    justify-content: flex-start; /* Pushes the header to the very top */
+    width: 100%;                 /* Ensures it takes up the full screen */
+}
 .app-header { background:var(--surface); color:var(--text-light); padding:20px; padding-top:env(safe-area-inset-top, 20px); display:flex; justify-content:space-between; align-items:center; box-shadow:0 4px 15px rgba(0,0,0,0.1); z-index:10;}
 .app-header h1 { font-family:var(--display); font-size:16px; letter-spacing:1.5px; color:var(--accent); display:flex; align-items:center; gap:8px;}
 .live-dot { width:8px; height:8px; border-radius:50%; background:var(--success); animation:pulse-live 2s infinite; box-shadow:0 0 8px var(--success);}
@@ -404,7 +429,7 @@ const PLANET_OPTIONS = [
     { name: 'Saturn', map: 'saturn.jpg', hasClouds: false, hasRings: true, ringMap: 'saturn_rings.png', ringInner: 12, ringOuter: 22, ringOpacity: 0.9, atmosphereColor: 0xeeddcc, moons: [ { radius: 0.6, distance: 25, speed: 0.018, color: 0xaaaaaa, map: 'enceladus.jpg' }, { radius: 0.8, distance: 28, speed: 0.014, color: 0xcccccc, map: 'tethys.jpg' }, { radius: 2.0, distance: 33, speed: 0.010, color: 0xffaa66, map: 'titan.jpg' }, { radius: 0.5, distance: 37, speed: 0.008, color: 0xaaaaaa, map: 'iapetus.jpg' } ] },
     { name: 'Uranus', map: 'uranus.jpg', hasClouds: false, hasRings: true, ringMap: 'uranus_rings.png', ringInner: 14, ringOuter: 18, ringOpacity: 0.5, atmosphereColor: 0x66ccff, moons: [ { radius: 0.7, distance: 21, speed: 0.012, color: 0xaaaaaa, map: 'titania.jpg' }, { radius: 0.6, distance: 24, speed: 0.010, color: 0x999999, map: 'oberon.jpg' } ] },
     { name: 'Neptune', map: 'neptune.jpg', hasClouds: false, atmosphereColor: 0x3366ff, hasRings: false, moons: [ { radius: 1.2, distance: 18, speed: 0.015, color: 0xcccccc, map: 'triton.jpg' } ] },
-    { name: 'Pluto', map: 'pluto.jpg', hasClouds: false, atmosphereColor: 0xcccccc, hasRings: false, moons: [ { radius: 0.8, distance: 14, speed: 0.02, color: 0x999999, map: 'charon.jpg' } ] }
+    { name: 'Pluto', map: 'pluto.jpg', hasClouds: false, atmosphereColor: 0xcccccc, hasRings: false, moons: [ { radius: 6, distance: 35, speed: 0.005, color: 0x999999, map: 'charon.jpg' } ] }
 ];
 
 const atmosphereVertexShader = `varying vec3 vNormal; void main() { vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
