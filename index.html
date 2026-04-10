@@ -42,12 +42,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 .screen.gone{display:none}
 
 /* 3D ENTRY SPLASH */
-#solar {
-    background: none; /* Remove the static CSS background */
-    z-index: 50;
-    position: fixed;
-    inset: 0;
-}
+#solar{background:#05020a; z-index:50;}
 #solar-ui {position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:80px; transition:opacity 0.4s ease; cursor:pointer;}
 .holo-text {font-family:var(--display); color:#ffffff; text-align:center; letter-spacing:2px; padding:0 20px; pointer-events:none;}
 .holo-text h1 {font-size:clamp(18px, 6vw, 28px); text-shadow: 0 0 15px rgba(209, 184, 136, 0.5); margin-bottom:8px; color:var(--accent);}
@@ -395,110 +390,152 @@ async function pushCloudData() {
 // ============================================================================
 // 3D INTERACTIVE SPLASH SCREEN
 // ============================================================================
-// ==========================================
-// 3D ENGINE & SMOOTH PARALLAX
-// ==========================================
-let scene, camera, renderer, planet, skySphere;
-let mouseX = 0, mouseY = 0;
-let targetX = 0, targetY = 0; // For smooth animation gliding
+let scene, camera, renderer, earthGroup, planetMesh, clouds, stars;
+let moonData = []; 
+let mouseX = 0; let mouseY = 0;
+let windowHalfX = window.innerWidth / 2; let windowHalfY = window.innerHeight / 2;
+
+const PLANET_OPTIONS = [
+    { name: 'Mercury', map: 'mercury.jpg', hasClouds: false, atmosphereColor: 0x444444, hasRings: false, moons: [] },
+    { name: 'Venus', map: 'venus.jpg', hasClouds: true, atmosphereColor: 0xffbb55, hasRings: false, moons: [] },
+    { name: 'Earth', map: 'earth.jpg', hasClouds: true, atmosphereColor: 0x3388ff, hasRings: false, moons: [ { radius: 1.5, distance: 18, speed: 0.01, color: 0xcccccc, map: 'moon.jpg' } ] },
+    { name: 'Mars', map: 'mars.jpg', hasClouds: false, atmosphereColor: 0xff6633, hasRings: false, moons: [ { radius: 0.5, distance: 13, speed: 0.02, color: 0xaaaaaa, map: 'phobos.jpg' }, { radius: 0.3, distance: 16, speed: 0.015, color: 0xaaaaaa, map: 'deimos.jpg' } ] },
+    { name: 'Jupiter', map: 'jupiter.jpg', hasClouds: false, atmosphereColor: 0xffccaa, hasRings: false, moons: [ { radius: 1.2, distance: 16, speed: 0.015, color: 0xddddaa, map: 'io.jpg' }, { radius: 1.0, distance: 19, speed: 0.012, color: 0xffffff, map: 'europa.jpg' }, { radius: 1.8, distance: 23, speed: 0.009, color: 0xbbbbbb, map: 'ganymede.jpg' }, { radius: 1.5, distance: 28, speed: 0.007, color: 0x888888, map: 'callisto.jpg' } ] },
+    { name: 'Saturn', map: 'saturn.jpg', hasClouds: false, hasRings: true, ringMap: 'saturn_rings.png', ringInner: 12, ringOuter: 22, ringOpacity: 0.9, atmosphereColor: 0xeeddcc, moons: [ { radius: 0.6, distance: 25, speed: 0.018, color: 0xaaaaaa, map: 'enceladus.jpg' }, { radius: 0.8, distance: 28, speed: 0.014, color: 0xcccccc, map: 'tethys.jpg' }, { radius: 2.0, distance: 33, speed: 0.010, color: 0xffaa66, map: 'titan.jpg' }, { radius: 0.5, distance: 37, speed: 0.008, color: 0xaaaaaa, map: 'iapetus.jpg' } ] },
+    { name: 'Uranus', map: 'uranus.jpg', hasClouds: false, hasRings: true, ringMap: 'uranus_rings.png', ringInner: 14, ringOuter: 18, ringOpacity: 0.5, atmosphereColor: 0x66ccff, moons: [ { radius: 0.7, distance: 21, speed: 0.012, color: 0xaaaaaa, map: 'titania.jpg' }, { radius: 0.6, distance: 24, speed: 0.010, color: 0x999999, map: 'oberon.jpg' } ] },
+    { name: 'Neptune', map: 'neptune.jpg', hasClouds: false, atmosphereColor: 0x3366ff, hasRings: false, moons: [ { radius: 1.2, distance: 18, speed: 0.015, color: 0xcccccc, map: 'triton.jpg' } ] },
+    { name: 'Pluto', map: 'pluto.jpg', hasClouds: false, atmosphereColor: 0xcccccc, hasRings: false, moons: [ { radius: 0.8, distance: 14, speed: 0.02, color: 0x999999, map: 'charon.jpg' } ] }
+];
+
+const atmosphereVertexShader = `varying vec3 vNormal; void main() { vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const atmosphereFragmentShader = `varying vec3 vNormal; uniform vec3 glowColor; void main() { float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 4.0); gl_FragColor = vec4(glowColor, 1.0) * intensity; }`;
 
 function init3D() {
-   scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0514); // Fallback dark color
-    
-    // 1. Responsive Camera (Moves back on mobile)
+    const container = document.getElementById('three-container');
+    scene = new THREE.Scene(); 
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+    // Check if the screen is narrow (mobile)
     const isMobile = window.innerWidth < 768;
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000);
-    camera.position.set(0, 2, isMobile ? 85 : 45);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    // Adjust camera distance: 45 for desktop, 70 for mobile (further back)
+    const cameraZ = isMobile ? 70 : 45;
+    const cameraY = isMobile ? 2 : 5; // Lower height for mobile
+
+camera.position.set(0, cameraY, cameraZ); 
+    renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight); 
+    container.appendChild(renderer.domElement);
+
+    const starGeo = new THREE.BufferGeometry(); 
+    const starPos = new Float32Array(2500 * 3);
+    for(let i=0; i<7500; i++) starPos[i] = (Math.random() - 0.5) * 500; 
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
     
-    // BULLETPROOF BACKGROUND ATTACHMENT
-    renderer.domElement.style.position = 'fixed';
-    renderer.domElement.style.top = '0';
-    renderer.domElement.style.left = '0';
-    renderer.domElement.style.width = '100vw';
-    renderer.domElement.style.height = '100vh';
-    renderer.domElement.style.zIndex = '-1'; // Pushes it behind your UI
-    renderer.domElement.style.pointerEvents = 'none'; // Lets you click your buttons
-    
-    document.body.appendChild(renderer.domElement);
-    document.body.style.backgroundColor = '#0a0514'; // Permanently kills the white background!
-    document.body.style.backgroundImage = 'none'; // Clears any conflicting CSS
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(8, 8, 0, 8, 8, 8);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 16, 16);
+    const starTexture = new THREE.CanvasTexture(canvas);
 
-    // 2. Sky Sphere Background (Encompasses the camera)
-    const loader = new THREE.TextureLoader();
-    loader.load('bg.jpg', (texture) => {
-        const skyGeo = new THREE.SphereGeometry(500, 60, 60);
-        const skyMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
-        skySphere = new THREE.Mesh(skyGeo, skyMat);
-        scene.add(skySphere);
-    });
+    stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 0.8, map: starTexture, depthWrite: false }));
+    scene.add(stars); 
 
-    // 3. Main Planet
-    const planetGeo = new THREE.SphereGeometry(15, 32, 32);
-    const planetMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, metalness: 0.7, roughness: 0.2 });
-    planet = new THREE.Mesh(planetGeo, planetMat);
-    scene.add(planet);
+    scene.add(new THREE.AmbientLight(0x111111)); 
+    const sunLight = new THREE.DirectionalLight(0xffeedd, 2.0); 
+    sunLight.position.set(20, 10, 15);
+    scene.add(sunLight);
 
-    // 4. Lighting
-    const light = new THREE.PointLight(0xffffff, 1.5);
-    light.position.set(50, 50, 50);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0x404040, 2));
+    earthGroup = new THREE.Group();
+    scene.add(earthGroup);
 
-    // 5. Triple Input Listeners for Parallax
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.position.z = window.innerWidth < 768 ? 85 : 45;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    const texLoader = new THREE.TextureLoader();
+    const currentPlanet = PLANET_OPTIONS[Math.floor(Math.random() * PLANET_OPTIONS.length)];
 
-    // Desktop Mouse
-    document.addEventListener('mousemove', (e) => {
-        targetX = e.clientX - window.innerWidth / 2;
-        targetY = e.clientY - window.innerHeight / 2;
-    });
+    const planetGeo = new THREE.SphereGeometry(10, 64, 64);
+    const planetMat = new THREE.MeshStandardMaterial({ map: texLoader.load(currentPlanet.map), color: 0xaaaaaa, roughness: 0.8, metalness: 0.0 });
+    planetMesh = new THREE.Mesh(planetGeo, planetMat);
+    earthGroup.add(planetMesh);
 
-    // Mobile Swipe
-    document.addEventListener('touchmove', (e) => {
-        targetX = e.touches[0].clientX - window.innerWidth / 2;
-        targetY = e.touches[0].clientY - window.innerHeight / 2;
-    });
+    const atmosphereMat = new THREE.ShaderMaterial({ vertexShader: atmosphereVertexShader, fragmentShader: atmosphereFragmentShader, uniforms: { glowColor: { value: new THREE.Color(currentPlanet.atmosphereColor) } }, blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true });
+    const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(11.2, 64, 64), atmosphereMat);
+    earthGroup.add(atmosphere);
 
-    // Mobile Gyroscope (Tilt)
-    window.addEventListener('deviceorientation', (e) => {
-        if (e.gamma !== null && e.beta !== null) {
-            targetX = e.gamma * 5; 
-            targetY = (e.beta - 45) * 5; // -45 offsets standard holding angle
-        }
-    });
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-
-    // Smooth gliding math (Lerp)
-    mouseX += (targetX - mouseX) * 0.05;
-    mouseY += (targetY - mouseY) * 0.05;
-
-    // Planet constant rotation
-    if(planet) planet.rotation.y += 0.003;
-    
-    // Background parallax rotation
-    if(skySphere) {
-        skySphere.rotation.y = mouseX * 0.0002;
-        skySphere.rotation.x = -mouseY * 0.0002;
+    if (currentPlanet.hasClouds) {
+        const cloudGeo = new THREE.SphereGeometry(10.15, 64, 64);
+        const cloudMat = new THREE.MeshStandardMaterial({ map: texLoader.load('https://unpkg.com/three-globe/example/img/earth-clouds10k.png'), transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending });
+        clouds = new THREE.Mesh(cloudGeo, cloudMat);
+        earthGroup.add(clouds);
     }
 
-    // Camera depth shifting
-    camera.position.x = mouseX * 0.01;
-    camera.position.y = -mouseY * 0.01;
-    camera.lookAt(scene.position);
+    if (currentPlanet.hasRings) {
+        const ringGeo = new THREE.RingGeometry(currentPlanet.ringInner, currentPlanet.ringOuter, 64, 32);
+        const pos = ringGeo.attributes.position;
+        const uvs = ringGeo.attributes.uv;
+        for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i); const y = pos.getY(i);
+            const radius = Math.sqrt(x * x + y * y);
+            const u = (radius - currentPlanet.ringInner) / (currentPlanet.ringOuter - currentPlanet.ringInner);
+            uvs.setXY(i, u, 0.5);
+        }
+        uvs.needsUpdate = true;
+        let ringMatOptions = { transparent: true, opacity: currentPlanet.ringOpacity, side: THREE.DoubleSide };
+        if (currentPlanet.ringMap) { ringMatOptions.map = texLoader.load(currentPlanet.ringMap); ringMatOptions.color = 0xffffff; } else { ringMatOptions.color = currentPlanet.ringColor; }
+        const ringMat = new THREE.MeshStandardMaterial(ringMatOptions);
+        const rings = new THREE.Mesh(ringGeo, ringMat);
+        rings.rotation.x = Math.PI / 2;
+        earthGroup.add(rings);
+    }
 
-    renderer.render(scene, camera);
+    currentPlanet.moons.forEach(m => {
+        const pivot = new THREE.Group();
+        earthGroup.add(pivot);
+        const moonGeo = new THREE.SphereGeometry(m.radius, 32, 32);
+        let moonMatOptions = { roughness: 1.0 };
+        if (m.map && m.map !== '') { moonMatOptions.map = texLoader.load(m.map); moonMatOptions.color = 0xffffff; } else { moonMatOptions.color = m.color; }
+        const moonMat = new THREE.MeshStandardMaterial(moonMatOptions);
+        const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+        moonMesh.position.set(m.distance, 0, 0);
+        pivot.add(moonMesh);
+        moonData.push({ pivot: pivot, mesh: moonMesh, speed: m.speed });
+    });
+
+    document.getElementById('solar').addEventListener('mousemove', onMouseMove, false);
+    document.getElementById('solar').addEventListener('touchmove', onTouchMove, {passive: true});
+    window.addEventListener('resize', onWindowResize, false);
+    animate();
+}
+
+function onMouseMove(e) { mouseX = (e.clientX - windowHalfX) * 0.002; mouseY = (e.clientY - windowHalfY) * 0.002; }
+function onTouchMove(e) { mouseX = (e.touches[0].clientX - windowHalfX) * 0.002; mouseY = (e.touches[0].clientY - windowHalfY) * 0.002; }
+function onWindowResize() {
+    windowHalfX = window.innerWidth / 2;
+    windowHalfY = window.innerHeight / 2;
+    
+    camera.aspect = window.innerWidth / window.innerHeight;
+    
+    // Dynamically adjust distance on resize
+    const dist = window.innerWidth < 768 ? 70 : 45;
+    camera.position.z = dist;
+    
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+function animate() { 
+    requestAnimationFrame(animate); 
+    if(planetMesh) planetMesh.rotation.y += 0.002;
+    if(clouds) clouds.rotation.y += 0.0025; 
+    if(stars) stars.rotation.y += 0.0002;
+    moonData.forEach(m => { m.pivot.rotation.y -= m.speed; m.mesh.rotation.y += 0.005; });
+    camera.position.x += (mouseX * 15 - camera.position.x) * 0.05;
+    camera.position.y += (-mouseY * 15 + 5 - camera.position.y) * 0.05;
+    camera.lookAt(scene.position);
+    earthGroup.rotation.x += (mouseY - earthGroup.rotation.x) * 0.05;
+    earthGroup.rotation.y += (mouseX - earthGroup.rotation.y) * 0.05;
+    renderer.render(scene, camera); 
 }
 
 // ============================================================================
