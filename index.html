@@ -43,10 +43,13 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 
 /* 3D ENTRY SPLASH */
 #solar {
-    background: none; /* Remove the static CSS background */
-    z-index: 50;
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1; 
+    pointer-events: none; /* Lets you click buttons through it */
 }
 #solar-ui {position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:80px; transition:opacity 0.4s ease; cursor:pointer;}
 .holo-text {font-family:var(--display); color:#ffffff; text-align:center; letter-spacing:2px; padding:0 20px; pointer-events:none;}
@@ -403,7 +406,8 @@ let mouseX = 0, mouseY = 0;
 let targetX = 0, targetY = 0; // For smooth animation gliding
 
 function init3D() {
-    scene = new THREE.Scene();
+   scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0514); // Fallback dark color
     
     // 1. Responsive Camera (Moves back on mobile)
     const isMobile = window.innerWidth < 768;
