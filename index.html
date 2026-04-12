@@ -340,7 +340,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 // CLOUD BACKEND SETUP & TWO-WAY SYNC
 // ============================================================================
 // 🔴 IMPORTANT: Paste the Web App URL from Phase 1 Step 2 here:
-const API_URL = "https://script.google.com/macros/s/AKfycbw7GQnyrXLpjwT_Q4mWTmyZzdmIdlMydQkyXxU_LIdoPY7eDJUaVMmPGUQ0YQ6yl_ozQQ/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbz3a3zFWErBPfHnCcoGpxzFlRTR6AG6a80G1EGrWinMmUMgHqfB9sx7cMt0VainYoGOtA/exec"; 
 
 let APP = {
     events: [],
@@ -399,47 +399,7 @@ async function backgroundSync(forceRender = false) {
     }
 }
 
-async function pushCloudData() {
-    // Show a small loading indicator if you have one
-    console.log("Syncing with Google Sheets...");
 
-    try {
-        // 1. Prepare Public Events: Convert arrays/booleans to formats Sheets understands
-        const prepEvents = APP.events.map(e => ({
-            ...e,
-            isUsed: e.isUsed ? "TRUE" : "FALSE", // Convert boolean to Sheet string
-            scanned: e.scanned || 0,
-            assignments: typeof e.assignments === 'string' ? e.assignments : JSON.stringify(e.assignments || [])
-        }));
-
-        // 2. Prepare Private Requests: Do the same for the requests list
-        const prepRequests = APP.requests.map(r => ({
-            ...r,
-            isUsed: r.isUsed ? "TRUE" : "FALSE",
-            scanned: r.scanned || 0,
-            assignments: typeof r.assignments === 'string' ? r.assignments : JSON.stringify(r.assignments || [])
-        }));
-
-        // 3. Send the POST request to your Google Apps Script API
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            mode: 'no-cors', // Important for Google Apps Script standard setups
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                events: prepEvents, 
-                requests: prepRequests 
-            })
-        });
-
-        // Note: With 'no-cors', the browser won't let us read response.ok, 
-        // but the data will still arrive at the script.
-        console.log("Sync request sent successfully.");
-        
-    } catch (err) {
-        console.error("Cloud Sync Failed:", err);
-        showToast("Sync Error: Check Connection", "error");
-    }
-}
 
 // ============================================================================
 // 3D INTERACTIVE SPLASH SCREEN
@@ -1477,39 +1437,31 @@ function openScanner() {
     .catch(err => { alert("Camera Error: " + err); closeScanner(); });
 }
 
-async function onScanSuccess(decodedText) {
+function onScanSuccess(decodedText) {
+    // 1. Break down the QR code
     const data = decodedText.split('|');
+    
     if (data[0] === 'PLANET') {
-        const evId = data[1];
-        const scanCount = parseInt(data[2]);
+        const evId = data[1]; // Get the ID from the QR code
 
-        // Look for the show in your data
+        // 2. Check if that ID exists in your Google Sheet data
         let type = 'public';
         let ev = APP.events.find(e => e.id == evId);
-        if(!ev) { ev = APP.requests.find(r => r.id == evId); type = 'private'; }
+        
+        if(!ev) { 
+            ev = APP.requests.find(r => r.id == evId); 
+            type = 'private'; 
+        }
 
+        // 3. React based on whether we found it
         if(ev) {
-            // NEW: Check if this specific ticket has already been used
-            if (ev.isUsed === true || ev.isUsed === "TRUE") {
-                showToast("This QR Code has ALREADY been used!", "error");
-                return; // Stop the function here
-            }
-
-            // If not used, mark it as used now
-            ev.isUsed = true;
-            ev.scanned = scanCount; // Set scanned to the full amount immediately
-            
-            showToast(`Admitted ${scanCount} attendee(s)!`, 'success');
-            
-            // Sync this change to Google Sheets immediately
-            await pushCloudData();
+            showToast(`Valid Ticket! Show ID: ${evId}`, 'success');
             openDetails(ev.id, type); 
-            
         } else {
-            showToast(`Show ID ${evId} not found.`, 'error');
+            showToast(`Invalid Ticket! ID ${evId} not found in the system.`, 'error');
         }
     } else {
-        showToast("Invalid Planetarium Ticket QR Code.", "error");
+        showToast("Invalid Planetarium Ticket format.", "error");
     }
 }
 
