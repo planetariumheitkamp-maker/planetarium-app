@@ -340,7 +340,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 // CLOUD BACKEND SETUP & TWO-WAY SYNC
 // ============================================================================
 // 🔴 IMPORTANT: Paste the Web App URL from Phase 1 Step 2 here:
-const API_URL = "https://script.google.com/macros/s/AKfycbz3a3zFWErBPfHnCcoGpxzFlRTR6AG6a80G1EGrWinMmUMgHqfB9sx7cMt0VainYoGOtA/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbxwydpeSN8cWL0PW06gwphVA69FKwmrAZ5RUjUXjorQLBruNPDU6Nijlt4TAoAT_N8IRw/exec"; 
 
 let APP = {
     events: [],
@@ -1437,14 +1437,14 @@ function openScanner() {
     .catch(err => { alert("Camera Error: " + err); closeScanner(); });
 }
 
-function onScanSuccess(decodedText) {
-    // 1. Break down the QR code
+// 1. The Smart Scanner
+async function onScanSuccess(decodedText) {
     const data = decodedText.split('|');
     
     if (data[0] === 'PLANET') {
-        const evId = data[1]; // Get the ID from the QR code
+        const evId = data[1];
+        const scanCount = parseInt(data[2]) || 1; 
 
-        // 2. Check if that ID exists in your Google Sheet data
         let type = 'public';
         let ev = APP.events.find(e => e.id == evId);
         
@@ -1453,15 +1453,60 @@ function onScanSuccess(decodedText) {
             type = 'private'; 
         }
 
-        // 3. React based on whether we found it
         if(ev) {
-            showToast(`Valid Ticket! Show ID: ${evId}`, 'success');
+            // Check if the ticket was already used!
+            if (ev.isUsed === true || ev.isUsed === "TRUE") {
+                showToast(`❌ TICKET REJECTED: ID ${evId} has already been scanned!`, 'error');
+                return; // Stop the function here
+            }
+
+            // If it's valid and new, update it
+            ev.scanned = (ev.scanned || 0) + scanCount;
+            ev.isUsed = "TRUE"; // Mark it used
+            
+            showToast(`✅ Admitted ${scanCount}! Ticket locked.`, 'success');
+            
+            // Push the update to Google
+            await pushCloudData();
             openDetails(ev.id, type); 
+            
         } else {
-            showToast(`Invalid Ticket! ID ${evId} not found in the system.`, 'error');
+            showToast(`❌ Invalid Ticket: ID ${evId} not found.`, 'error');
         }
     } else {
-        showToast("Invalid Planetarium Ticket format.", "error");
+        showToast("❌ Invalid Planetarium Ticket format.", "error");
+    }
+}
+
+// 2. The Secure Cloud Sync
+async function pushCloudData() {
+    console.log("Pushing updates to Google Sheets...");
+
+    const payload = {
+        events: APP.events,
+        requests: APP.requests
+    };
+
+    try {
+        // Since we are on GitHub Pages (https), this standard text/plain fetch 
+        // works perfectly and completely bypasses strict CORS errors.
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8' 
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        
+        if (result.status === "success") {
+            console.log("✅ Sync successful!");
+        } else {
+            console.error("❌ Sync error from Google:", result.message);
+        }
+    } catch (err) {
+        console.error("❌ Network block:", err);
     }
 }
 
