@@ -1470,8 +1470,8 @@ async function onScanSuccess(decodedText) {
     }
 }
 
-async function pushScanToCloud(eventId, count) {
-    console.log(`Preparing to send scan for Event: ${eventId}`);
+function pushScanToCloud(eventId, count) {
+    console.log(`Smuggling scan data for Event: ${eventId}...`);
 
     const payload = {
         action: 'scan_ticket',
@@ -1479,22 +1479,37 @@ async function pushScanToCloud(eventId, count) {
         count: count
     };
 
-    // Wrap the data in a fake form submission to bypass CORS
-    const formData = new URLSearchParams();
-    formData.append('data', JSON.stringify(payload));
+    // 1. Create an invisible iframe to catch Google's redirect
+    const iframeName = 'hidden_iframe_' + Date.now();
+    const iframe = document.createElement('iframe');
+    iframe.name = iframeName;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
 
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            body: formData 
-            // Notice we removed the headers entirely! 
-            // The browser will auto-generate the correct "form" headers.
-        });
-        
-        console.log("✅ Scan data fired at Google!");
-    } catch (err) {
-        console.error("❌ App failed to send data:", err);
-    }
+    // 2. Create an invisible form
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = API_URL; 
+    form.target = iframeName; // This forces the result into the invisible iframe
+
+    // 3. Create a hidden input field called "data" to hold our JSON
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'data'; 
+    input.value = JSON.stringify(payload);
+    
+    // 4. Attach it all to the page and fire!
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+
+    console.log("✅ Scan data fired through the invisible tunnel!");
+
+    // 5. Clean up the invisible elements after 3 seconds so the app stays fast
+    setTimeout(() => {
+        document.body.removeChild(form);
+        document.body.removeChild(iframe);
+    }, 3000);
 }
 
 // ============================================================================
