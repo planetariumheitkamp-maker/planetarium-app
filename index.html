@@ -1438,12 +1438,20 @@ function openScanner() {
 }
 
 function onScanSuccess(decodedText) {
-    // Break down the "PLANET|12345|2" format
     const data = decodedText.split('|');
     
     if (data[0] === 'PLANET') {
         const evId = data[1]; 
+        const scanCount = parseInt(data[2]) || 1;
 
+        // 1. THE LOCAL LOCK: Check if this device has already scanned this ID
+        const alreadyScanned = getScannedTickets();
+        if (alreadyScanned.includes(evId)) {
+            showToast(`❌ TICKET REJECTED: ID ${evId} has already been scanned!`, 'error');
+            return; // Stop the scanner instantly
+        }
+
+        // 2. Validate against the downloaded database
         let type = 'public';
         let ev = APP.events.find(e => e.id == evId);
         
@@ -1453,8 +1461,15 @@ function onScanSuccess(decodedText) {
         }
 
         if(ev) {
-            showToast(`✅ Valid Ticket! Show ID: ${evId}`, 'success');
+            // 3. Lock the ticket in the device's memory
+            lockTicket(evId);
+
+            // 4. Update the visual count on your screen
+            ev.scanned = (ev.scanned || 0) + scanCount;
+            
+            showToast(`✅ Admitted ${scanCount}! Ticket locked.`, 'success');
             openDetails(ev.id, type); 
+            
         } else {
             showToast(`❌ Invalid Ticket: ID ${evId} not found.`, 'error');
         }
@@ -1463,9 +1478,20 @@ function onScanSuccess(decodedText) {
     }
 }
 
-// DELETE the pushScanToCloud() function entirely. 
-// We are no longer trying to push live scan counts to Google.
-// ============================================================================
+// Looks inside the device's memory for already scanned tickets
+function getScannedTickets() {
+    const stored = localStorage.getItem('planetarium_scanned_tickets');
+    return stored ? JSON.parse(stored) : [];
+}
+
+// Saves a new ticket to the device's memory so it can't be used again
+function lockTicket(ticketId) {
+    const scanned = getScannedTickets();
+    if (!scanned.includes(ticketId)) {
+        scanned.push(ticketId);
+        localStorage.setItem('planetarium_scanned_tickets', JSON.stringify(scanned));
+    }
+}
 // MODAL UTILS
 // ============================================================================
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
