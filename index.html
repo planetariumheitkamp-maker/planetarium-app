@@ -1476,6 +1476,9 @@ function onScanSuccess(decodedText) {
     } else {
         showToast("❌ Invalid Planetarium Ticket format.", "error");
     }
+  <button onclick="closeScanner()" style="background-color: red; color: white; padding: 10px; border-radius: 5px;">
+    Close Scanner
+</button>
 }
 
 // Looks inside the device's memory for already scanned tickets
@@ -1508,7 +1511,9 @@ function lockTicket(ticketId) {
         // Fallback just to hide the box if the scanner wasn't running
         document.getElementById('reader').style.display = 'none';
     }
+    
 }
+  
 // MODAL UTILS
 // ============================================================================
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
