@@ -1481,17 +1481,18 @@ async function pushScanToCloud(eventId, count) {
     try {
         await fetch(API_URL, {
             method: 'POST',
+            mode: 'no-cors', // THIS IS THE MAGIC FIX
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
         });
-        console.log("✅ Scan successfully logged in the database!");
+        
+        // Because we use no-cors, the browser hides Google's response from us.
+        // We won't see a "success" message from Google, so we just log that we sent it!
+        console.log("✅ Scan data fired at Google!");
+        
     } catch (err) {
-        console.error("❌ Network block:", err);
+        console.error("❌ App failed to send data:", err);
     }
-}
-function closeScanner() {
-    if(html5QrcodeScanner) html5QrcodeScanner.stop().catch(e => console.error(e));
-    document.getElementById('qrModal').classList.remove('active');
 }
 
 // ============================================================================
