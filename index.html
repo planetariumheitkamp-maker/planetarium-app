@@ -1437,13 +1437,12 @@ function openScanner() {
     .catch(err => { alert("Camera Error: " + err); closeScanner(); });
 }
 
-// 1. The Smart Scanner
-async function onScanSuccess(decodedText) {
+function onScanSuccess(decodedText) {
+    // Break down the "PLANET|12345|2" format
     const data = decodedText.split('|');
     
     if (data[0] === 'PLANET') {
-        const evId = data[1];
-        const scanCount = parseInt(data[2]) || 1; 
+        const evId = data[1]; 
 
         let type = 'public';
         let ev = APP.events.find(e => e.id == evId);
@@ -1454,14 +1453,8 @@ async function onScanSuccess(decodedText) {
         }
 
         if(ev) {
-            // Update the screen instantly
-            ev.scanned = (ev.scanned || 0) + scanCount;
-            showToast(`✅ Admitted ${scanCount}!`, 'success');
-            
-            // Send ONLY the scan data to Google, so we don't overwrite seats
-            await pushScanToCloud(evId, scanCount);
+            showToast(`✅ Valid Ticket! Show ID: ${evId}`, 'success');
             openDetails(ev.id, type); 
-            
         } else {
             showToast(`❌ Invalid Ticket: ID ${evId} not found.`, 'error');
         }
@@ -1470,48 +1463,8 @@ async function onScanSuccess(decodedText) {
     }
 }
 
-function pushScanToCloud(eventId, count) {
-    console.log(`Smuggling scan data for Event: ${eventId}...`);
-
-    const payload = {
-        action: 'scan_ticket',
-        eventId: eventId,
-        count: count
-    };
-
-    // 1. Create an invisible iframe to catch Google's redirect
-    const iframeName = 'hidden_iframe_' + Date.now();
-    const iframe = document.createElement('iframe');
-    iframe.name = iframeName;
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-
-    // 2. Create an invisible form
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = API_URL; 
-    form.target = iframeName; // This forces the result into the invisible iframe
-
-    // 3. Create a hidden input field called "data" to hold our JSON
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'data'; 
-    input.value = JSON.stringify(payload);
-    
-    // 4. Attach it all to the page and fire!
-    form.appendChild(input);
-    document.body.appendChild(form);
-    form.submit();
-
-    console.log("✅ Scan data fired through the invisible tunnel!");
-
-    // 5. Clean up the invisible elements after 3 seconds so the app stays fast
-    setTimeout(() => {
-        document.body.removeChild(form);
-        document.body.removeChild(iframe);
-    }, 3000);
-}
-
+// DELETE the pushScanToCloud() function entirely. 
+// We are no longer trying to push live scan counts to Google.
 // ============================================================================
 // MODAL UTILS
 // ============================================================================
