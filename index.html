@@ -870,7 +870,7 @@ function renderCurrentPage() {
                 <div class="card-detail"><span>📍</span> ${locOrTopic}</div>
                 <div class="card-detail"><span>👥</span> Expected: ${item.spots || item.size || 0}</div>
                 ${currentDetailType === 'public' ? `<div class="card-detail" style="color:var(--success); font-weight:bold;"><span>🎫</span> Scanned/Arrived: ${item.scanned || 0}</div>` : ''}
-                ${currentDetailType === 'private' ? `<div class="card-detail"><span>👤</span> Contact: ${item.contact || 'No Email Provided'}</div>` : ''}
+                ${currentDetailType === 'private' ? `<div class="card-detail"><span>👤</span> Contact: ${item.email || 'No Email Provided'}</div>` : ''}
             </div>
 
             <h3 style="font-size:16px; margin:24px 0 16px; color:var(--text-dark);">Staff Roster</h3>
