@@ -1158,7 +1158,7 @@ function rescheduleRequest(id) {
     const req = APP.requests.find(r => r.id == id);
     if(!req) return;
     
-    const clientEmail = req.contact;
+    const clientEmail = req.email;
     if (!clientEmail || !clientEmail.includes('@')) {
         return showToast("No valid email address was provided for this group.", "error");
     }
