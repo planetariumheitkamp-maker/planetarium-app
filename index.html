@@ -688,7 +688,21 @@ async function submitRegistration() {
     APP.users.push(newUser);
     
     document.getElementById('cloud-syncing').classList.add('active');
-    await pushCloudData();
+    
+    // --- NEW CLOUD SYNC CODE ---
+    // We send the data right here, completely bypassing CORS and missing functions!
+    try {
+        await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ users: APP.users })
+        });
+        console.log("✅ New user successfully saved to Google!");
+    } catch (err) {
+        console.error("❌ Cloud sync failed:", err);
+    }
+    // ---------------------------
+
     document.getElementById('cloud-syncing').classList.remove('active');
 
     showToast("Account Created! Logging you in...", "success");
@@ -705,17 +719,9 @@ async function submitRegistration() {
     initWorkerApp(); 
     showScreen('worker');
     
-    if(syncIntervalTimer) clearInterval(syncIntervalTimer);
-    syncIntervalTimer = setInterval(backgroundSync, 10000);
+    if(typeof syncIntervalTimer !== 'undefined' && syncIntervalTimer) clearInterval(syncIntervalTimer);
+    syncIntervalTimer = setInterval(typeof backgroundSync === 'function' ? backgroundSync : () => {}, 10000);
 }
-
-document.addEventListener('keydown', (e) => {
-    const loginScreen = document.getElementById('login-screen');
-    const viewLogin = document.getElementById('view-login');
-    if (!loginScreen.classList.contains('hidden') && viewLogin.style.display !== 'none') {
-        if (e.key === 'Enter') verifyLogin();
-    }
-});
 
 // ============================================================================
 // APP NAVIGATION & FORMATTING HELPERS
