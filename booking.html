@@ -294,9 +294,11 @@ async function submitBooking() {
 
         // 6. Push everything back to the cloud
         await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ events: prepEvents, requests: prepRequests })
-        });
+        method: 'POST',
+        // THIS LINE IS CRITICAL TO BYPASS CORS
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
+        body: JSON.stringify({ events: prepEvents, requests: prepRequests })
+    });
 
         // 7. Show Success
         document.getElementById('loadingOverlay').classList.remove('active');
