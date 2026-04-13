@@ -1476,9 +1476,6 @@ function onScanSuccess(decodedText) {
     } else {
         showToast("❌ Invalid Planetarium Ticket format.", "error");
     }
-  <button onclick="closeScanner()" style="background-color: red; color: white; padding: 10px; border-radius: 5px;">
-    Close Scanner
-</button>
 }
 
 // Looks inside the device's memory for already scanned tickets
@@ -1495,23 +1492,9 @@ function lockTicket(ticketId) {
         localStorage.setItem('planetarium_scanned_tickets', JSON.stringify(scanned));
     }
 }
-  function closeScanner() {
-    // Replace 'html5QrcodeScanner' with your actual variable name if it is different!
-    if (typeof html5QrcodeScanner !== 'undefined') {
-        html5QrcodeScanner.clear().then(() => {
-            console.log("✅ Camera released.");
-            
-            // Hide the container where the camera was showing
-            document.getElementById('reader').style.display = 'none'; 
-            
-        }).catch(err => {
-            console.error("❌ Failed to close scanner: ", err);
-        });
-    } else {
-        // Fallback just to hide the box if the scanner wasn't running
-        document.getElementById('reader').style.display = 'none';
-    }
-    
+ function closeScanner() {
+    if(html5QrcodeScanner) html5QrcodeScanner.stop().catch(e => console.error(e));
+    document.getElementById('qrModal').classList.remove('active');
 }
   
 // MODAL UTILS
