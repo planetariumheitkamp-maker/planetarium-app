@@ -35,7 +35,9 @@ body.dark-mode {
   --bg-main: #121212; --surface: #2b1d52; --surface2: #3c2a6e; --surface3: #1c1336; 
   --text-dark: #F4F4F4; --text-light: #F4F4F4; --muted-dark: #a996cc; --muted-light: #b0a3c9;
   --card-bg: #1e1e24; --border-light: rgba(255,255,255,0.1); --nav-active: var(--accent);
-  /* Force labels and roles to use the readable lavender in dark mode */
+}
+
+/* Dark mode element overrides — FLAT */
 body.dark-mode label, 
 body.dark-mode .role, 
 body.dark-mode .topic,
@@ -398,7 +400,7 @@ function isEventInFuture(dateStr, timeStr) {
 // CLOUD SYNC
 // ============================================================================
 async function pushCloudData() {
-    if (API_URL === "https://script.google.com/macros/s/AKfycbwHaiE3XFLqDgpgm6wERo_6Ql_t-f6vC42itGSCX-5SbO81MymhT4rcFzf5NxnbXOzyew/exec") {
+    if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
         console.warn("API_URL not set. Skipping cloud sync.");
         return;
     }
@@ -443,7 +445,7 @@ function parseAssignments(val) {
 }
 
 async function backgroundSync(forceRender = false) {
-    if (API_URL === "https://script.google.com/macros/s/AKfycbwHaiE3XFLqDgpgm6wERo_6Ql_t-f6vC42itGSCX-5SbO81MymhT4rcFzf5NxnbXOzyew/exec") return;
+    if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") return;
     try {
         const response = await fetch(API_URL);
         const data = await response.json();
@@ -634,7 +636,6 @@ function animate() {
 // ============================================================================
 // SPLASH & SYNC LOGIC
 // ============================================================================
-let isSyncing = false;
 
 function dismissSplash() {
     if(isSyncing) return;
