@@ -23,17 +23,11 @@
   --success: #2ed573; --danger: #ff4757; --warning: #ffa502;
   --card-bg: #ffffff; --border-light: rgba(68, 45, 125, 0.08); --nav-active: var(--surface);
   /* Force the Session Timer to be visible in dark mode */
-body.dark-mode #sessionTimeDisplay {
-    color: var(--text-light) !important;
-}
-/* Force the Topic/Role text to be readable in dark mode */
-body.dark-mode .staff-role {
-    color: var(--muted-light); 
-}
-/* Force the '0.00 hrs' stats to be readable in dark mode */
-body.dark-mode span[style*="color:var(--surface)"] {
-    color: var(--text-light) !important;
-}
+/* Dark mode element overrides — FLAT (not nested) */
+body.dark-mode #sessionTimeDisplay { color: var(--text-light) !important; }
+body.dark-mode .staff-role { color: var(--muted-light); }
+body.dark-mode span[style*="color:var(--surface)"] { color: var(--text-light) !important; }
+body.dark-mode label, body.dark-mode .role, body.dark-mode .topic, body.dark-mode .subtitle { color: var(--muted-light); }
 }
 
 /* DARK MODE THEME VARIABLES */
@@ -159,6 +153,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 
 .toast{position:fixed;top:env(safe-area-inset-top, 20px);left:50%;transform:translateX(-50%) translateY(-100px);background:var(--surface); color:var(--text-light); border-radius:12px;padding:14px 24px;font-size:14px;z-index:9999;transition:transform .4s cubic-bezier(0.2, 0.8, 0.2, 1); box-shadow:0 10px 30px rgba(0, 0, 0, 0.3); font-weight:600; width:90%; text-align:center;}
 .toast.show{transform:translateX(-50%) translateY(0)}
+.toast.error{background:var(--danger); color:#fff;}
 </style>
 </head>
 <body>
@@ -190,7 +185,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
                 <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
             </div>
             
-            <button class="btn btn-primary" style="margin-top:24px;" onclick="verifyLogin()">Login</button>
+            <button class="btn btn-primary" style="margin-top:24px;" onclick="verifyLogin()" id="loginBtn">Login</button>
         </div>
         
         <button style="margin-top:30px; background:transparent; border:none; color:var(--accent); font-family:var(--font); font-size:14px; text-decoration:underline; cursor:pointer;" onclick="toggleRegisterView(true)">Create New Account</button>
@@ -208,7 +203,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
             <div class="form-group"><label>Create Password</label><input type="password" id="regPassword" placeholder="••••••••"></div>
             <div class="form-group"><label>President's Invite Key</label><input type="text" id="regKey" placeholder="Enter secure key"></div>
             
-            <button class="btn btn-primary" style="margin-top:20px;" onclick="submitRegistration()">Create Account</button>
+            <button class="btn btn-primary" style="margin-top:20px;" onclick="submitRegistration()" id="regBtn">Create Account</button>
             <button class="btn btn-outline" style="margin-top:10px; border-color:transparent; color:var(--muted-dark);" onclick="toggleRegisterView(false)">Cancel</button>
         </div>
     </div>
@@ -340,7 +335,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 // CLOUD BACKEND SETUP & TWO-WAY SYNC
 // ============================================================================
 // 🔴 IMPORTANT: Paste the Web App URL from Phase 1 Step 2 here:
-const API_URL = "https://script.google.com/macros/s/AKfycbx0cAFqxsoDB0QQ5CTBPYOEwzFXmm_XkGrVUgg5aaj4TAZFnC1KfJUzXAVUyBa-clpz8w/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbwHaiE3XFLqDgpgm6wERo_6Ql_t-f6vC42itGSCX-5SbO81MymhT4rcFzf5NxnbXOzyew/exec"; 
 
 let APP = {
     events: [],
@@ -363,7 +358,84 @@ let currentDetailType = null;
 let lastKnownDataHash = "";
 let syncIntervalTimer = null;
 let html5QrcodeScanner = null;
+let isSyncing = false;
 
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+function sanitize(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validateFutureDate(dateStr) {
+    const inputDate = new Date(dateStr + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return inputDate >= today;
+}
+
+function setLoading(btnId, isLoading) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.style.opacity = isLoading ? '0.6' : '1';
+}
+
+function isEventInFuture(dateStr, timeStr) {
+    if (!dateStr) return false;
+    const eventDate = new Date(dateStr + (timeStr ? 'T' + timeStr : 'T00:00:00'));
+    return eventDate > new Date();
+}
+
+// ============================================================================
+// CLOUD SYNC
+// ============================================================================
+async function pushCloudData() {
+    if (API_URL === "https://script.google.com/macros/s/AKfycbwHaiE3XFLqDgpgm6wERo_6Ql_t-f6vC42itGSCX-5SbO81MymhT4rcFzf5NxnbXOzyew/exec") {
+        console.warn("API_URL not set. Skipping cloud sync.");
+        return;
+    }
+
+    const serialize = (arr) => arr.map(item => ({
+        ...item,
+        assignments: typeof item.assignments === 'string' 
+            ? item.assignments 
+            : JSON.stringify(item.assignments || [])
+    }));
+
+    const payload = {
+        users: APP.users,
+        events: serialize(APP.events),
+        requests: serialize(APP.requests),
+        time: APP.time,
+        timeLogs: APP.timeLogs,
+        settings: APP.settings
+    };
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message);
+        document.getElementById('liveIndicator')?.classList.remove('offline');
+        console.log("Cloud sync successful");
+    } catch (err) {
+        console.error("Cloud sync failed:", err);
+        document.getElementById('liveIndicator')?.classList.add('offline');
+        showToast("Sync failed. Changes saved locally.", "error");
+    }
+}
 function parseAssignments(val) {
     if (!val) return [];
     if (typeof val === 'string') { try { return JSON.parse(val); } catch(e) { return []; } }
@@ -371,7 +443,7 @@ function parseAssignments(val) {
 }
 
 async function backgroundSync(forceRender = false) {
-    if(API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") return;
+    if (API_URL === "https://script.google.com/macros/s/AKfycbwHaiE3XFLqDgpgm6wERo_6Ql_t-f6vC42itGSCX-5SbO81MymhT4rcFzf5NxnbXOzyew/exec") return;
     try {
         const response = await fetch(API_URL);
         const data = await response.json();
@@ -379,22 +451,29 @@ async function backgroundSync(forceRender = false) {
         if (currentDataHash !== lastKnownDataHash || forceRender) {
             console.log("Cloud synced successfully.");
             lastKnownDataHash = currentDataHash;
-            if(data.events) APP.events = data.events.map(e => ({...e, assignments: parseAssignments(e.assignments)}));
-            if(data.requests) APP.requests = data.requests.map(r => ({...r, assignments: parseAssignments(r.assignments)}));
-            if(data.time) APP.time = { total: parseFloat(data.time.total)||0, max: parseFloat(data.time.max)||1000 };
-            if(data.timeLogs) APP.timeLogs = data.timeLogs;
-            if(data.users && data.users.length > 0) APP.users = data.users;
+            if (data.events) APP.events = data.events.map(e => ({...e, assignments: parseAssignments(e.assignments)}));
+            if (data.requests) APP.requests = data.requests.map(r => ({...r, assignments: parseAssignments(r.assignments)}));
+            if (data.time) APP.time = { total: parseFloat(data.time.total)||0, max: parseFloat(data.time.max)||1000 };
+            if (data.timeLogs) APP.timeLogs = data.timeLogs;
+            if (data.users && data.users.length > 0) {
+                const cloudIds = new Set(data.users.map(u => u.id));
+                const localOnly = APP.users.filter(u => !cloudIds.has(u.id));
+                APP.users = [...data.users, ...localOnly];
+            }
             
             APP.settings = data.settings || { inviteKey: 'STARLIGHT', notifsEnabled: true, pauseShows: false };
             
-            if(APP.currentUser) {
-                APP.currentUser = APP.users.find(u => u.id === APP.currentUser.id) || APP.currentUser;
+            if (APP.currentUser) {
+                const cloudUser = APP.users.find(u => u.id === APP.currentUser.id);
+                if (cloudUser) {
+                    APP.currentUser = { ...cloudUser, password: APP.currentUser.password || cloudUser.password };
+                }
                 applyTheme();
                 renderCurrentPage(); 
             }
         }
         document.getElementById('liveIndicator')?.classList.remove('offline');
-    } catch(err) {
+    } catch (err) {
         document.getElementById('liveIndicator')?.classList.add('offline');
     }
 }
@@ -579,8 +658,14 @@ function finishSplashTransition() {
     if(savedSession) {
         try {
             const parsedUser = JSON.parse(savedSession);
-            const cloudUser = APP.users.find(u => u.id === parsedUser.id) || parsedUser;
-            APP.currentUser = cloudUser;
+            const cloudUser = APP.users.find(u => u.id === parsedUser.id);
+            
+            if (cloudUser) {
+                APP.currentUser = cloudUser;
+            } else {
+                APP.currentUser = parsedUser;
+                console.warn("User not found in cloud data");
+            }
             
             applyTheme();
             initWorkerApp();
@@ -590,9 +675,7 @@ function finishSplashTransition() {
                 showScreen('worker'); 
             }, 400);
             
-            if(syncIntervalTimer) clearInterval(syncIntervalTimer);
-            syncIntervalTimer = setInterval(backgroundSync, 10000);
-            setInterval(timeclockLoop, 60000);
+            startSyncIntervals();
             return; 
         } catch(e) {
             localStorage.removeItem('planetarium_user');
@@ -602,10 +685,17 @@ function finishSplashTransition() {
     setTimeout(() => { 
         document.getElementById('solar').classList.add('gone'); 
         showScreen('login-screen'); 
-    }, 400); 
+    }, 400);
     isSyncing = false; 
 }
 
+function startSyncIntervals() {
+    if (syncIntervalTimer) clearInterval(syncIntervalTimer);
+    syncIntervalTimer = setInterval(backgroundSync, SYNC_INTERVAL_MS);
+    
+    if (window.timeclockInterval) clearInterval(window.timeclockInterval);
+    window.timeclockInterval = setInterval(timeclockLoop, 60000);
+}
 // ============================================================================
 // LOGIN, REGISTRATION & THEME LOGIC
 // ============================================================================
@@ -625,7 +715,9 @@ function applyTheme() {
 
 async function toggleDarkMode(isDark) {
     APP.currentUser.darkMode = isDark;
-    localStorage.setItem('planetarium_user', JSON.stringify(APP.currentUser));
+    const sessionUser = { ...APP.currentUser };
+    delete sessionUser.password;
+    localStorage.setItem('planetarium_user', JSON.stringify(sessionUser));
     const cloudUser = APP.users.find(u => u.id === APP.currentUser.id);
     if(cloudUser) cloudUser.darkMode = isDark;
     applyTheme();
@@ -640,25 +732,32 @@ async function verifyLogin() {
 
     if(!userIn || !passIn) return showToast('Please enter both email and password.', 'error');
 
-    const user = APP.users.find(u => (u.username || '').toLowerCase() === userIn.toLowerCase() && u.password === passIn);
+    setLoading('loginBtn', true);
+    
+    const user = APP.users.find(u => 
+        (u.username || '').toLowerCase() === userIn.toLowerCase() && 
+        u.password === passIn
+    );
     
     if(user) {
         document.getElementById('loginUsername').value = '';
         document.getElementById('loginPassword').value = '';
 
+        const sessionUser = { ...user };
+        delete sessionUser.password;
+        
         APP.currentUser = user; 
-        localStorage.setItem('planetarium_user', JSON.stringify(user)); 
+        localStorage.setItem('planetarium_user', JSON.stringify(sessionUser)); 
         applyTheme(); 
         initWorkerApp(); 
         showScreen('worker');
-
-        if(syncIntervalTimer) clearInterval(syncIntervalTimer);
-        syncIntervalTimer = setInterval(backgroundSync, 10000); 
-        setInterval(timeclockLoop, 60000); 
+        startSyncIntervals();
     } else {
         if(navigator.vibrate) navigator.vibrate([200]); 
         showToast('Incorrect Email or Password', 'error'); 
     }
+    
+    setLoading('loginBtn', false);
 }
 
 async function submitRegistration() {
@@ -668,7 +767,7 @@ async function submitRegistration() {
     const key = document.getElementById('regKey').value;
 
     if(!name || !username || !password || !key) return showToast("Please fill out all fields", "error");
-    if(!username.includes('@')) return showToast("Please enter a valid email address", "error");
+    if(!validateEmail(username)) return showToast("Please enter a valid email address", "error");
     if(password.length < 6) return showToast("Password must be at least 6 characters", "error");
     if(key.toLowerCase() !== APP.settings.inviteKey.toLowerCase()) return showToast("Invalid President's Invite Key", "error");
     
@@ -676,8 +775,10 @@ async function submitRegistration() {
         return showToast("That Email is already registered. Choose another.", "error");
     }
 
+    setLoading('regBtn', true);
+    
     const newUser = { 
-        id: Math.floor(Math.random() * 100000), 
+        id: Date.now(),
         name: name, 
         role: 'staff', 
         username: username,
@@ -688,39 +789,27 @@ async function submitRegistration() {
     APP.users.push(newUser);
     
     document.getElementById('cloud-syncing').classList.add('active');
-    
-    // --- NEW CLOUD SYNC CODE ---
-    // We send the data right here, completely bypassing CORS and missing functions!
-    try {
-        await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ users: APP.users })
-        });
-        console.log("✅ New user successfully saved to Google!");
-    } catch (err) {
-        console.error("❌ Cloud sync failed:", err);
-    }
-    // ---------------------------
-
+    await pushCloudData();
     document.getElementById('cloud-syncing').classList.remove('active');
 
     showToast("Account Created! Logging you in...", "success");
     
-    document.getElementById('regName').value = '';
-    document.getElementById('regUsername').value = '';
-    document.getElementById('regPassword').value = '';
-    document.getElementById('regKey').value = '';
+    ['regName', 'regUsername', 'regPassword', 'regKey'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
 
+    const sessionUser = { ...newUser };
+    delete sessionUser.password;
+    
     APP.currentUser = newUser;
-    localStorage.setItem('planetarium_user', JSON.stringify(newUser)); 
+    localStorage.setItem('planetarium_user', JSON.stringify(sessionUser)); 
     applyTheme();
     toggleRegisterView(false);
     initWorkerApp(); 
     showScreen('worker');
     
-    if(typeof syncIntervalTimer !== 'undefined' && syncIntervalTimer) clearInterval(syncIntervalTimer);
-    syncIntervalTimer = setInterval(typeof backgroundSync === 'function' ? backgroundSync : () => {}, 10000);
+    startSyncIntervals();
+    setLoading('regBtn', false);
 }
 
 // ============================================================================
@@ -735,8 +824,16 @@ function doLogout() {
     APP.currentUser = null; 
     localStorage.removeItem('planetarium_user'); 
     document.body.classList.remove('dark-mode'); 
+    
+    if (syncIntervalTimer) clearInterval(syncIntervalTimer);
+    if (window.timeclockInterval) clearInterval(window.timeclockInterval);
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.stop().catch(() => {});
+    }
+    isClockedIn = false;
+    clockInTime = null;
+    
     showScreen('login-screen'); 
-    if(syncIntervalTimer) clearInterval(syncIntervalTimer); 
 }
 
 function initWorkerApp() {
@@ -812,6 +909,7 @@ function renderCurrentPage() {
 
         const title = item.title || item.group;
         const locOrTopic = item.location || item.topics;
+        const showReschedule = isAdmin && currentDetailType === 'private' && isEventInFuture(item.date, item.time);
 
         let staffHTML = item.assignments.map(a => {
             const staff = APP.users.find(u => u.id == a.staffId) || {name:'Unknown', role:'Removed'};
@@ -864,7 +962,7 @@ function renderCurrentPage() {
                     <h2 style="font-size:18px;">Details</h2>
                 </div>
                 <div style="display:flex; gap:8px;">
-                    ${isAdmin && currentDetailType === 'private' ? `<button class="btn btn-small btn-outline" style="border-color:var(--warning); color:var(--warning);" onclick="rescheduleRequest(${item.id})">Reschedule</button>` : ''}
+                    ${showReschedule ? `<button class="btn btn-small btn-outline" style="border-color:var(--warning); color:var(--warning);" onclick="rescheduleRequest(${item.id})">Reschedule</button>` : ''}
                     ${isAdmin ? `<button class="btn btn-small btn-outline" onclick="openEventModal(${item.id}, '${currentDetailType}')">Edit Info</button>` : ''}
                 </div>
             </div>
@@ -1116,15 +1214,17 @@ function openEventModal(id, type) {
 async function saveEvent() {
     const id = document.getElementById('evId').value;
     const type = document.getElementById('evType').value;
-    const title = document.getElementById('evTitle').value;
+    const title = sanitize(document.getElementById('evTitle').value.trim());
     const date = document.getElementById('evDate').value;
     const time = document.getElementById('evTime').value;
-    const loc = document.getElementById('evLoc').value;
+    const loc = sanitize(document.getElementById('evLoc').value.trim());
     const spots = parseInt(document.getElementById('evSpots').value) || 0;
     const max = parseInt(document.getElementById('evMax').value) || 100;
-    const contact = document.getElementById('evContact').value;
+    const contact = sanitize(document.getElementById('evContact').value.trim());
 
     if(!title) return showToast("Title is required", "error");
+    if(!date || !time) return showToast("Date and time are required", "error");
+    if(!validateFutureDate(date)) return showToast("Event date must be today or in the future", "error");
 
     const arr = type === 'public' ? APP.events : APP.requests;
 
@@ -1133,14 +1233,13 @@ async function saveEvent() {
         if(type === 'public') { item.title = title; item.location = loc; item.spots = spots; item.max = max; } 
         else { item.group = title; item.topics = loc; item.size = spots; item.contact = contact || 'No Email Provided'; }
         item.date = date; item.time = time;
-    } else {
+       } else {
         const newId = Math.floor(Math.random() * 100000);
         const defaultAssignments = APP.users.map(u => ({ staffId: u.id, role: type === 'public' ? 'Staff' : '', status: type === 'public' ? 'accepted' : 'pending', respondedAt: '' }));
 
         if(type === 'public') arr.push({id: newId, title, date, time, location:loc, max, spots, scanned:0, assignments: defaultAssignments});
         else arr.push({id: newId, group:title, date, time, topics:loc, size:spots, contact: contact || 'No Email Provided', status:'approved', scanned:0, assignments: defaultAssignments});
     }
-
     closeModal('eventModal'); renderCurrentPage(); 
     document.getElementById('cloud-syncing').classList.add('active');
     await pushCloudData();
@@ -1165,7 +1264,7 @@ function rescheduleRequest(id) {
     if(!req) return;
     
     const clientEmail = req.email;
-    if (!clientEmail || !clientEmail.includes('@')) {
+    if (!clientEmail || !validateEmail(clientEmail)) {
         return showToast("No valid email address was provided for this group.", "error");
     }
 
@@ -1175,7 +1274,6 @@ function rescheduleRequest(id) {
     window.location.href = `mailto:${clientEmail}?subject=${subject}&body=${body}`;
     showToast("Opening your native email app...", "success");
 }
-
 // 🚨 NEW: Native Email App Integration for Staff Broadcasts
 function emailAllStaff() {
     const emails = APP.users
@@ -1226,7 +1324,7 @@ async function saveTopic(evId, evType, staffId) {
 // ============================================================================
 // TIMECLOCK LOGIC
 // ============================================================================
-function toggleClock() {
+async function toggleClock() {
     if(isClockedIn) {
         const minsWorked = (new Date() - clockInTime) / 60000;
         
@@ -1240,14 +1338,16 @@ function toggleClock() {
         });
         
         isClockedIn = false;
+        clockInTime = null;
         showToast(`Clocked out. Added ${minsWorked.toFixed(0)} mins.`, 'success');
-        pushCloudData();
     } else {
         isClockedIn = true;
         clockInTime = new Date();
         showToast("Clocked In!", "success");
     }
-    wNav('time');
+    
+    renderCurrentPage();
+    await pushCloudData();
 }
 
 function timeclockLoop() {
@@ -1321,7 +1421,9 @@ async function saveNewPassword() {
     if(newPass.length < 6) return showToast("Password must be at least 6 characters", "error");
 
     APP.currentUser.password = newPass;
-    localStorage.setItem('planetarium_user', JSON.stringify(APP.currentUser));
+    const sessionUser = { ...APP.currentUser };
+    delete sessionUser.password;
+    localStorage.setItem('planetarium_user', JSON.stringify(sessionUser));
     
     const userInCloud = APP.users.find(u => u.id === APP.currentUser.id);
     if(userInCloud) userInCloud.password = newPass;
@@ -1332,7 +1434,6 @@ async function saveNewPassword() {
     await pushCloudData();
     document.getElementById('cloud-syncing').classList.remove('active');
 }
-
 function openKeyModal() { document.getElementById('newKeyInput').value = APP.settings.inviteKey; document.getElementById('keyModal').classList.add('open'); }
 
 async function saveNewKey() {
@@ -1398,7 +1499,9 @@ async function saveRoles() {
     const me = APP.users.find(u => u.id === APP.currentUser.id);
     if(me) {
         APP.currentUser.role = me.role;
-        localStorage.setItem('planetarium_user', JSON.stringify(APP.currentUser));
+        const sessionUser = { ...APP.currentUser };
+        delete sessionUser.password;
+        localStorage.setItem('planetarium_user', JSON.stringify(sessionUser));
     }
 
     closeModal('roleModal');
@@ -1466,15 +1569,15 @@ function onScanSuccess(decodedText) {
             type = 'private'; 
         }
 
-        if(ev) {
-            // 3. Lock the ticket in the device's memory
+                if (ev) {
             lockTicket(evId);
-
-            // 4. Update the visual count on your screen
             ev.scanned = (ev.scanned || 0) + scanCount;
             
             showToast(`✅ Admitted ${scanCount}! Ticket locked.`, 'success');
-            openDetails(ev.id, type); 
+            
+            pushCloudData().then(() => {
+                openDetails(ev.id, type);
+            });
             
         } else {
             showToast(`❌ Invalid Ticket: ID ${evId} not found.`, 'error');
@@ -1507,9 +1610,11 @@ function lockTicket(ticketId) {
 // ============================================================================
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function showToast(msg, type='success'){
-    const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
-    if (type === 'error') { t.style.background = '#ff4757'; t.style.color = '#fff'; }
-    else { t.style.background = 'var(--surface)'; t.style.color = 'var(--text-light)'; }
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show';
+    if (type === 'error') { t.classList.add('error'); }
+    else { t.classList.remove('error'); }
     setTimeout(() => t.classList.remove('show'), 3000);
 }
 document.querySelectorAll('.modal-bg').forEach(bg => { bg.addEventListener('click', (e) => { if(e.target === bg) bg.classList.remove('open'); });});
