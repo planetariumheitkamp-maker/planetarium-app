@@ -216,11 +216,11 @@
 
 <script>
 // ============================================================================
-// GOOGLE APP SCRIPT API URL
+// GOOGLE APP SCRIPT API URL — UPDATE WITH YOUR NEW DEPLOYMENT URL
 // ============================================================================
 const API_URL = "https://script.google.com/macros/s/AKfycbx0cAFqxsoDB0QQ5CTBPYOEwzFXmm_XkGrVUgg5aaj4TAZFnC1KfJUzXAVUyBa-clpz8w/exec";
 
-// Navigation Logic
+// Navigation Logic (unchanged)
 function nextStep(current) {
     if(current === 1) {
         if(!document.getElementById('bookDate').value || !document.getElementById('bookTime').value) {
@@ -238,7 +238,7 @@ function prevStep(current) {
 }
 
 // ============================================================================
-// SUBMISSION & EMAIL LOGIC
+// SUBMISSION & EMAIL LOGIC — FIXED FOR CORS
 // ============================================================================
 async function submitBooking() {
     // 1. Validate Form
@@ -261,7 +261,7 @@ async function submitBooking() {
         return;
     }
 
-    // 2. Build the payload with action flag
+    // 2. Build the payload
     const payload = {
         action: "submitBooking",
         id: Math.floor(Math.random() * 1000000),
@@ -280,11 +280,14 @@ async function submitBooking() {
     document.getElementById('submitBtn').disabled = true;
 
     try {
-        // 3. Send to Google Apps Script
+        // 3. Send to Google Apps Script — CRITICAL FIXES:
+        //    - Content-Type: text/plain (avoids CORS preflight)
+        //    - redirect: "follow" (handles the 302 redirect)
         const response = await fetch(API_URL, {
             method: 'POST',
+            redirect: 'follow',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain;charset=utf-8',
             },
             body: JSON.stringify(payload)
         });
