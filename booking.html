@@ -216,13 +216,12 @@
 
 <script>
 // ============================================================================
-// GOOGLE APP SCRIPT API URL (MUST MATCH YOUR STAFF APP URL)
+// GOOGLE APP SCRIPT API URL
 // ============================================================================
-const API_URL = "https://script.google.com/macros/s/AKfycbxl5uOgeHgGcHNPbRuwc32bEDDJJOyFfLs8axlHND9G_BYLq8QXIN8M24lCtB31I-H78Q/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbx0cAFqxsoDB0QQ5CTBPYOEwzFXmm_XkGrVUgg5aaj4TAZFnC1KfJUzXAVUyBa-clpz8w/exec";
 
 // Navigation Logic
 function nextStep(current) {
-    // Basic validation
     if(current === 1) {
         if(!document.getElementById('bookDate').value || !document.getElementById('bookTime').value) {
             alert("Please select a date and time.");
@@ -239,38 +238,41 @@ function prevStep(current) {
 }
 
 // ============================================================================
-// SUBMISSION & CLOUD SYNC LOGIC
+// SUBMISSION & EMAIL LOGIC
 // ============================================================================
 async function submitBooking() {
     // 1. Validate Form
-    const group = document.getElementById('groupName').value;
-    const contact = document.getElementById('contactName').value;
-    const email = document.getElementById('contactEmail').value;
+    const group = document.getElementById('groupName').value.trim();
+    const contact = document.getElementById('contactName').value.trim();
+    const email = document.getElementById('contactEmail').value.trim();
     const size = document.getElementById('groupSize').value;
-    
-    if(!group || !contact || !email || !size) {
+    const date = document.getElementById('bookDate').value;
+    const time = document.getElementById('bookTime').value;
+    const topics = document.getElementById('topics').value.trim() || "General Show";
+
+    if(!group || !contact || !email || !size || !date || !time) {
         alert("Please fill out all required fields.");
         return;
     }
 
-    if(API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
-        alert("Warning: Google API URL not set. Data will not be saved to cloud.");
-        showSuccessScreen(email);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if(!emailRegex.test(email)) {
+        alert("Please enter a valid email address.");
         return;
     }
 
-    // 2. Prepare the new request object
-    const newRequest = {
-        id: Math.floor(Math.random() * 1000000), // Generate random ID
+    // 2. Build the payload with action flag
+    const payload = {
+        action: "submitBooking",
+        id: Math.floor(Math.random() * 1000000),
         group: group,
         contact: contact,
         email: email,
-        date: document.getElementById('bookDate').value,
-        time: document.getElementById('bookTime').value,
+        date: date,
+        time: time,
         size: parseInt(size),
-        topics: document.getElementById('topics').value || "General Show",
-        status: "pending", // ALWAYS PENDING FOR PUBLIC REQUESTS
-        assignments: [] // Let the staff app handle assignments when they log in
+        topics: topics,
+        status: "pending"
     };
 
     // Show loading spinner
@@ -278,35 +280,27 @@ async function submitBooking() {
     document.getElementById('submitBtn').disabled = true;
 
     try {
-        // 3. Fetch existing data (so we don't overwrite the master sheet)
-        const response = await fetch(API_URL);
-        const data = await response.json();
+        // 3. Send to Google Apps Script
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
 
-        let existingEvents = data.events || [];
-        let existingRequests = data.requests || [];
+        const result = await response.json();
 
-        // 4. Append new request to the list
-        existingRequests.push(newRequest);
-
-        // 5. Serialize arrays to strings so Google Sheets flat cells can hold them
-        const prepEvents = existingEvents.map(e => ({...e, assignments: typeof e.assignments === 'string' ? e.assignments : JSON.stringify(e.assignments || [])}));
-        const prepRequests = existingRequests.map(r => ({...r, assignments: typeof r.assignments === 'string' ? r.assignments : JSON.stringify(r.assignments || [])}));
-
-        // 6. Push everything back to the cloud
-        await fetch(API_URL, {
-        method: 'POST',
-        // THIS LINE IS CRITICAL TO BYPASS CORS
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-        body: JSON.stringify({ events: prepEvents, requests: prepRequests })
-    });
-
-        // 7. Show Success
-        document.getElementById('loadingOverlay').classList.remove('active');
-        showSuccessScreen(email);
+        if(result.success) {
+            document.getElementById('loadingOverlay').classList.remove('active');
+            showSuccessScreen(email);
+        } else {
+            throw new Error(result.message || "Unknown error");
+        }
 
     } catch(err) {
         console.error("Booking Failed", err);
-        alert("There was an error submitting your request. Please try again or check your connection.");
+        alert("There was an error submitting your request: " + err.message);
         document.getElementById('loadingOverlay').classList.remove('active');
         document.getElementById('submitBtn').disabled = false;
     }
