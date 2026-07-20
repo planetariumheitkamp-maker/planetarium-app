@@ -658,14 +658,21 @@ function finishSplashTransition() {
         try {
             const parsedUser = JSON.parse(savedSession);
             
-            // Use the saved session user directly — don't wait for cloud sync
-            // The cloud sync will happen in the background and merge data
-            APP.currentUser = parsedUser;
+            // Use saved session directly — don't wait for cloud sync
+            // We need to reconstruct the full user since password was stripped from session
+            // Try to find in default users first, otherwise use session as-is
+            const defaultUser = APP.users.find(u => u.id === parsedUser.id);
             
-            // Also add to APP.users if not already there (first visit after registration)
-            const existingUser = APP.users.find(u => u.id === parsedUser.id);
-            if (!existingUser) {
-                APP.users.push(parsedUser);
+            if (defaultUser) {
+                APP.currentUser = defaultUser;
+            } else {
+                // User was registered after page load — use session data
+                // Add password back from session if it exists, otherwise set a flag
+                APP.currentUser = parsedUser;
+                // Ensure user is in APP.users array so the app works
+                if (!APP.users.find(u => u.id === parsedUser.id)) {
+                    APP.users.push(parsedUser);
+                }
             }
             
             applyTheme();
@@ -676,14 +683,14 @@ function finishSplashTransition() {
                 showScreen('worker'); 
             }, 400);
             
-            // Start background sync — this will merge cloud data
+            // Start background sync to get latest data
             startSyncIntervals();
             
-            // Force an immediate sync to get latest data
-            backgroundSync(true);
+            // Immediate sync to fetch full user data from cloud
+            setTimeout(() => backgroundSync(true), 500);
             return; 
         } catch(e) {
-            console.error("Failed to restore session:", e);
+            console.error("Session restore failed:", e);
             localStorage.removeItem('planetarium_user');
         }
     }
