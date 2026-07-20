@@ -222,7 +222,7 @@ window.onload = async () => {
     }
 
     try {
-        if(API_URL === "https://script.google.com/macros/s/AKfycbwHaiE3XFLqDgpgm6wERo_6Ql_t-f6vC42itGSCX-5SbO81MymhT4rcFzf5NxnbXOzyew/exec") {
+        if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
             document.getElementById('shows-list').innerHTML = "<p style='color:#ff4757; text-align:center; background:rgba(255,0,0,0.1); padding:20px; border-radius:12px;'>API URL NOT SET.</p>";
             document.getElementById('loading').classList.remove('active');
             document.getElementById('storefront').classList.add('active');
@@ -305,7 +305,7 @@ async function submitBooking() {
 
     // 2. SYNC TO CLOUD
     try {
-        if(API_URL !== "https://script.google.com/macros/s/AKfycbwHaiE3XFLqDgpgm6wERo_6Ql_t-f6vC42itGSCX-5SbO81MymhT4rcFzf5NxnbXOzyew/exec") {
+        if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
             // Prepare payload for automated email and seat update
             const payload = {
                 action: 'reserve_seats',
