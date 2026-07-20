@@ -659,13 +659,15 @@ function finishSplashTransition() {
     if(savedSession) {
         try {
             const parsedUser = JSON.parse(savedSession);
-            const cloudUser = APP.users.find(u => u.id === parsedUser.id);
             
-            if (cloudUser) {
-                APP.currentUser = cloudUser;
-            } else {
-                APP.currentUser = parsedUser;
-                console.warn("User not found in cloud data");
+            // Use the saved session user directly — don't wait for cloud sync
+            // The cloud sync will happen in the background and merge data
+            APP.currentUser = parsedUser;
+            
+            // Also add to APP.users if not already there (first visit after registration)
+            const existingUser = APP.users.find(u => u.id === parsedUser.id);
+            if (!existingUser) {
+                APP.users.push(parsedUser);
             }
             
             applyTheme();
@@ -676,9 +678,14 @@ function finishSplashTransition() {
                 showScreen('worker'); 
             }, 400);
             
+            // Start background sync — this will merge cloud data
             startSyncIntervals();
+            
+            // Force an immediate sync to get latest data
+            backgroundSync(true);
             return; 
         } catch(e) {
+            console.error("Failed to restore session:", e);
             localStorage.removeItem('planetarium_user');
         }
     }
@@ -689,7 +696,6 @@ function finishSplashTransition() {
     }, 400);
     isSyncing = false; 
 }
-
 function startSyncIntervals() {
     if (syncIntervalTimer) clearInterval(syncIntervalTimer);
     syncIntervalTimer = setInterval(backgroundSync, SYNC_INTERVAL_MS);
