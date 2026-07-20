@@ -458,9 +458,7 @@ async function backgroundSync(forceRender = false) {
             if (data.time) APP.time = { total: parseFloat(data.time.total)||0, max: parseFloat(data.time.max)||1000 };
             if (data.timeLogs) APP.timeLogs = data.timeLogs;
             if (data.users && data.users.length > 0) {
-                const cloudIds = new Set(data.users.map(u => u.id));
-                const localOnly = APP.users.filter(u => !cloudIds.has(u.id));
-                APP.users = [...data.users, ...localOnly];
+                    APP.users = data.users;
             }
             
             APP.settings = data.settings || { inviteKey: 'STARLIGHT', notifsEnabled: true, pauseShows: false };
