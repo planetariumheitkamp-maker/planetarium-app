@@ -659,21 +659,15 @@ function finishSplashTransition() {
         try {
             const parsedUser = JSON.parse(savedSession);
             
-            // Use saved session directly — don't wait for cloud sync
-            // We need to reconstruct the full user since password was stripped from session
-            // Try to find in default users first, otherwise use session as-is
-            const defaultUser = APP.users.find(u => u.id === parsedUser.id);
+            // Use saved session directly — don't depend on APP.users being populated yet
+            // APP.users only has default data at this point; cloud sync hasn't run
+            APP.currentUser = parsedUser;
             
-            if (defaultUser) {
-                APP.currentUser = defaultUser;
-            } else {
-                // User was registered after page load — use session data
-                // Add password back from session if it exists, otherwise set a flag
-                APP.currentUser = parsedUser;
-                // Ensure user is in APP.users array so the app works
-                if (!APP.users.find(u => u.id === parsedUser.id)) {
-                    APP.users.push(parsedUser);
-                }
+            // Ensure user exists in APP.users so the app functions properly
+            // (initWorkerApp() and other functions reference APP.users)
+            const existsInUsers = APP.users.find(u => u.id === parsedUser.id);
+            if (!existsInUsers) {
+                APP.users.push(parsedUser);
             }
             
             applyTheme();
@@ -684,10 +678,11 @@ function finishSplashTransition() {
                 showScreen('worker'); 
             }, 400);
             
-            // Start background sync to get latest data
+            // Start sync intervals
             startSyncIntervals();
             
-            // Immediate sync to fetch full user data from cloud
+            // Immediate background sync to fetch full data from cloud
+            // This will merge in the full user data (including any cloud updates)
             setTimeout(() => backgroundSync(true), 500);
             return; 
         } catch(e) {
