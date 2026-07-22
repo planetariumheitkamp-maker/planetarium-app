@@ -147,7 +147,7 @@
         
         <div style="display:flex; gap:12px; margin-top:30px;">
             <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('bookingModal').classList.remove('open')">Cancel</button>
-            <button class="btn" style="flex:1.5;" onclick="submitBooking()">Confirm Reservation</button>
+            <button class="btn" style="flex:1.5;" onclick="submitBooking()" id="confirmBtn">Confirm Reservation</button>
         </div>
     </div>
 </div>
@@ -286,6 +286,12 @@ function openBooking(id, availableSeats) {
 }
 
 async function submitBooking() {
+   const btn = document.getElementById('confirmBtn');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+   btn.disabled = false;
+    btn.textContent = 'Confirm Reservation';
     const evId = document.getElementById('book-id').value;
     const maxAllowed = parseInt(document.getElementById('book-max').value);
     const name = document.getElementById('bName').value;
@@ -305,38 +311,44 @@ async function submitBooking() {
 
     // 2. SYNC TO CLOUD
     try {
-        if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
-            // Prepare payload for automated email and seat update
-            const payload = {
-                action: 'reserve_seats',
-                eventId: evId,
-                count: count,
-                publicAppUrl: window.location.href.split('?')[0],
-                emailData: {
-                    name: name,
-                    email: email,
-                    showTitle: show.title,
-                    showDate: `${formatEventDate(show.date)} @ ${formatTime(show.time)}`
-                }
-            };
+                // Prepare payload for automated email and seat update
+        const payload = {
+            action: 'reserve_seats',
+            eventId: evId,
+            count: count,
+            publicAppUrl: window.location.href.split('?')[0],
+            emailData: {
+                name: name,
+                email: email,
+                showTitle: show.title,
+                showDate: `${formatEventDate(show.date)} @ ${formatTime(show.time)}`
+            }
+        };
 
-            // We await this now to ensure the cloud is updated before we refresh
+        try {
             await fetch(API_URL, {
                 method: 'POST',
+                redirect: 'follow',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(payload)
             });
-            
-            // 3. CLEAR LOCAL STORAGE (Cloud is now the "source of truth")
-            // This prevents double-counting after the refresh
-            localBookings[evId] = 0;
-            localStorage.setItem('planetarium_bookings', JSON.stringify(localBookings));
-            
-            alert(`Reservation complete! Tickets sent to ${email}.`);
-            window.location.reload(); 
+        } catch(e) {
+            console.error("Cloud sync failed:", e);
         }
+        
+        // Clear local tracking (cloud is now source of truth)
+        localBookings[evId] = 0;
+        localStorage.setItem('planetarium_bookings', JSON.stringify(localBookings));
+        
+        alert(`Reservation complete! Tickets sent to ${email}.`);
+        // After successful booking
+const ticketUrl = `${window.location.pathname}?ticket=${evId}&name=${encodeURIComponent(name)}&title=${encodeURIComponent(show.title)}&date=${encodeURIComponent(show.date)}&count=${count}`;
+window.location.href = ticketUrl;
+       
     } catch(e) {
         alert("Reservation confirmed locally, but cloud sync failed.");
     }
+   
 }
 
 // ============================================================================
@@ -402,7 +414,9 @@ function renderTicketWallet() {
     // Render exact QR Codes
     chunks.forEach((chunkSize, index) => {
         // TICKET|ID|GROUP|SIZE or standard TICKET|ID|SINGLE|INDEX
-        const qrText = chunkSize > 1 ? `TICKET|${id}|GROUP|${chunkSize}` : `TICKET|${id}|SINGLE|${index+1}`; 
+        const qrText = chunkSize > 1 
+    ? `TICKET|${id}|GROUP|${index+1}|${chunkSize}` 
+    : `TICKET|${id}|SINGLE|${index+1}`;
         new QRCode(document.getElementById(`qr-code-${index}`), {
             text: qrText, width: 180, height: 180, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H
         });
