@@ -253,7 +253,7 @@ function renderShows() {
     list.innerHTML = publicShows.map(show => {
         // Calculate true availability (Max - Scanned at door - Reserved locally right now)
         const deviceReserved = localBookings[show.id] || 0;
-        const available = show.max - (show.scanned || 0) - deviceReserved;
+        const available = show.max - (show.reserved || 0) - (show.scanned || 0) - deviceReserved;
         
         let badgeHTML = `<div class="capacity-badge">${available} Seats Left</div>`;
         if (available <= 0) badgeHTML = `<div class="capacity-badge sold-out">SOLD OUT</div>`;
