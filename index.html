@@ -1,338 +1,494 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+<head> 
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Staff Portal">
+<meta name="theme-color" content="#442D7D">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Heitkamp Planetarium — Box Office</title>
+<title>Planetarium Staff App</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;900&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
 <style>
-    * { margin:0; padding:0; box-sizing:border-box; font-family:'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
-    body { background:#0a0514; color:#fff; -webkit-font-smoothing: antialiased; min-height: 100vh; display:flex; flex-direction:column; overflow-x: hidden; }
+*{margin:0;padding:0;box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+:root{
+  --bg-main: #F4F4F4; --surface: #442D7D; --surface2: #5c3c9e; --surface3: #321c63; 
+  --text-dark: #7a65a8; --text-light: #F4F4F4; --muted-dark: #7a65a8; --muted-light: #b0a3c9;
+  --accent: #D1B888;  --font: 'Outfit', sans-serif; --display: 'Orbitron', monospace;
+  --success: #2ed573; --danger: #ff4757; --warning: #ffa502;
+  --card-bg: #ffffff; --border-light: rgba(68, 45, 125, 0.08); --nav-active: var(--surface);
+  /* Force the Session Timer to be visible in dark mode */
+/* Dark mode element overrides — FLAT (not nested) */
+body.dark-mode #sessionTimeDisplay { color: var(--text-light) !important; }
+body.dark-mode .staff-role { color: var(--muted-light); }
+body.dark-mode span[style*="color:var(--surface)"] { color: var(--text-light) !important; }
+body.dark-mode label, body.dark-mode .role, body.dark-mode .topic, body.dark-mode .subtitle { color: var(--muted-light); }
+}
 
-    /* Starry Background */
-    .bg-stars { position:fixed; inset:0; z-index:-1; background:radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%); overflow:hidden; }
-    .star { position:absolute; background:#fff; border-radius:50%; animation:twinkle infinite alternate; }
-    @keyframes twinkle { 0% {opacity:0.3;} 100% {opacity:1; transform:scale(1.2);} }
+/* DARK MODE THEME VARIABLES */
+body.dark-mode {
+  --bg-main: #121212; --surface: #2b1d52; --surface2: #3c2a6e; --surface3: #1c1336; 
+  --text-dark: #F4F4F4; --text-light: #F4F4F4; --muted-dark: #a996cc; --muted-light: #b0a3c9;
+  --card-bg: #1e1e24; --border-light: rgba(255,255,255,0.1); --nav-active: var(--accent);
+}
 
-    /* ===== 3D ENTRY SPLASH (identical to Staff App) ===== */
-    #solar { position:fixed; inset:0; background:#05020a; z-index:100; transition:opacity 0.4s ease; }
-    #solar.hidden { opacity:0; pointer-events:none; }
-    #solar.gone { display:none; }
-    #solar-ui { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:80px; transition:opacity 0.4s ease; cursor:pointer; }
-    .holo-text { font-family:'Orbitron', monospace; color:#ffffff; text-align:center; letter-spacing:2px; padding:0 20px; pointer-events:none; }
-    .holo-text h1 { font-size:clamp(18px, 6vw, 28px); text-shadow: 0 0 15px rgba(209, 184, 136, 0.5); margin-bottom:8px; color:#D1B888; }
-    #tap-text { font-size:11px; color:#ffffff; animation: pulse 2s infinite; letter-spacing: 4px; font-weight:700; transition:color 0.3s ease; }
-    @keyframes pulse { 0%, 100% {opacity:0.5;} 50% {opacity:1;} }
-    @keyframes pulse-fast { 0%, 100% {opacity:0.6;} 50% {opacity:1;} }
+/* Dark mode element overrides — FLAT */
+body.dark-mode label, 
+body.dark-mode .role, 
+body.dark-mode .topic,
+body.dark-mode .subtitle {
+    color: var(--muted-light); 
+}
+}
 
-    header { padding:24px 20px; text-align:center; background:rgba(10, 5, 20, 0.8); backdrop-filter:blur(10px); border-bottom:1px solid rgba(255,255,255,0.05); position:sticky; top:0; z-index:50; cursor:pointer;}
-    header h1 { font-family:'Orbitron', monospace; font-size:22px; color:#D1B888; letter-spacing:2px; }
-    header p { color:#a996cc; font-size:13px; margin-top:5px; }
+html,body{height:100%; width:100%; overflow:hidden; font-family:var(--font); background:var(--bg-main); color:var(--text-dark); -webkit-font-smoothing: antialiased;}
 
-    .container { max-width:600px; margin:0 auto; padding:20px; flex:1; width:100%; }
+body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, .staff-item {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
 
-    .view { display:none; animation:fadeIn 0.4s ease; }
-    .view.active { display:block; }
-    @keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;transition:opacity 0.4s ease; z-index:1; background:var(--bg-main);}
+.screen.hidden{opacity:0;pointer-events:none}
+.screen.gone{display:none}
 
-    /* ===== FRONT PAGE DOORS ===== */
-    .door {
-        display:flex; align-items:center; gap:18px; text-align:left; width:100%;
-        background:rgba(43, 29, 82, 0.6); border:1px solid rgba(209, 184, 136, 0.25);
-        border-radius:20px; padding:24px 22px; margin-bottom:16px; cursor:pointer;
-        backdrop-filter:blur(10px); transition:transform 0.15s, border-color 0.2s, background 0.2s;
-        color:#fff; font-family:'Outfit', sans-serif;
-    }
-    .door:hover { border-color:#D1B888; background:rgba(43, 29, 82, 0.85); }
-    .door:active { transform:scale(0.98); }
-    .door .door-icon { font-size:34px; flex-shrink:0; }
-    .door h2 { font-family:'Orbitron', monospace; font-size:16px; letter-spacing:1.5px; color:#D1B888; margin-bottom:5px; }
-    .door p { color:#b0a3c9; font-size:13px; line-height:1.5; }
-    .front-tag { text-align:center; color:#a996cc; font-size:13px; margin:26px 0 18px; letter-spacing:1px; }
+/* 3D ENTRY SPLASH */
+#solar{background:#05020a; z-index:50;}
+#solar-ui {position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:80px; transition:opacity 0.4s ease; cursor:pointer;}
+.holo-text {font-family:var(--display); color:#ffffff; text-align:center; letter-spacing:2px; padding:0 20px; pointer-events:none;}
+.holo-text h1 {font-size:clamp(18px, 6vw, 28px); text-shadow: 0 0 15px rgba(209, 184, 136, 0.5); margin-bottom:8px; color:var(--accent);}
+#tap-text {font-size:11px; color:#ffffff; animation: pulse 2s infinite; letter-spacing: 4px; font-weight:700; transition:color 0.3s ease;}
+@keyframes pulse { 0%, 100% {opacity:0.5;} 50% {opacity:1;} }
+@keyframes pulse-fast { 0%, 100% {opacity:0.6;} 50% {opacity:1;} }
 
-    /* Event Cards */
-    .show-card { background:rgba(43, 29, 82, 0.6); border:1px solid rgba(209, 184, 136, 0.2); border-radius:16px; padding:20px; margin-bottom:16px; backdrop-filter:blur(10px); transition:transform 0.2s; position:relative; overflow:hidden;}
-    .show-card:active { transform:scale(0.98); }
-    .show-title { font-size:20px; font-weight:700; color:#fff; margin-bottom:8px; padding-right:60px;}
-    .show-details { color:#b0a3c9; font-size:14px; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
+/* LOGIN & REGISTRATION SCREEN */
+#login-screen{flex-direction:column; background:var(--surface); justify-content:center; padding:20px;}
+.login-header {text-align:center; margin-bottom:20px;}
+.login-header h2{font-family:var(--display);font-size:24px;letter-spacing:3px;color:var(--accent);margin-bottom:8px;}
+.login-header p {color:var(--muted-light); font-size:14px;}
 
-    .capacity-badge { position:absolute; top:20px; right:20px; background:rgba(209, 184, 136, 0.1); color:#D1B888; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:700; border:1px solid rgba(209, 184, 136, 0.3);}
-    .capacity-badge.sold-out { background:rgba(255, 71, 87, 0.1); color:#ff4757; border-color:rgba(255, 71, 87, 0.3);}
+/* CLOUD LOADING OVERLAY */
+#cloud-syncing {position:absolute; inset:0; background:rgba(43, 29, 82, 0.95); backdrop-filter:blur(5px); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.3s;}
+#cloud-syncing.active {opacity:1; pointer-events:all;}
+.spinner {border:4px solid rgba(209, 184, 136, 0.3); border-top:4px solid var(--accent); border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; margin-bottom:16px;}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-    .btn { display:block; width:100%; padding:14px; margin-top:16px; background:#D1B888; color:#1c1336; text-align:center; border:none; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; text-decoration:none; transition:transform 0.1s; font-family:'Outfit', sans-serif;}
-    .btn:active { transform:scale(0.98); }
-    .btn:disabled { opacity:0.5; cursor:not-allowed; }
-    .btn-outline { background:transparent; border:2px solid #D1B888; color:#D1B888; }
-    .btn-ghost { background:transparent; border:1px solid rgba(255,255,255,0.2); color:#a996cc; }
-    .btn-small { padding:10px 16px; font-size:14px; }
+/* APP LAYOUT */
+#worker {
+    flex-direction: column; 
+    background: var(--bg-main);
+    align-items: stretch;       /* Forces the content to stretch side-to-side */
+    justify-content: flex-start; /* Pushes the header to the very top */
+    width: 100%;                 /* Ensures it takes up the full screen */
+}
+.app-header { background:var(--surface); color:var(--text-light); padding:20px; padding-top:env(safe-area-inset-top, 20px); display:flex; justify-content:space-between; align-items:center; box-shadow:0 4px 15px rgba(0,0,0,0.1); z-index:10;}
+.app-header h1 { font-family:var(--display); font-size:16px; letter-spacing:1.5px; color:var(--accent); display:flex; align-items:center; gap:8px;}
+.live-dot { width:8px; height:8px; border-radius:50%; background:var(--success); animation:pulse-live 2s infinite; box-shadow:0 0 8px var(--success);}
+@keyframes pulse-live { 0% {opacity:0.4; transform:scale(0.8);} 50% {opacity:1; transform:scale(1.2);} 100% {opacity:0.4; transform:scale(0.8);} }
+.live-dot.offline { background:var(--danger); box-shadow:0 0 8px var(--danger); animation:none; opacity:1;}
+.app-header p { font-size:11px; color:var(--muted-light); margin-top:2px; }
 
-    .back-link { background:none; border:none; color:#a996cc; font-size:14px; cursor:pointer; padding:6px 0; margin-bottom:14px; font-family:'Outfit', sans-serif; display:inline-flex; align-items:center; gap:6px;}
-    .back-link:hover { color:#D1B888; }
+.worker-main{flex:1; overflow-y:auto; padding:20px; padding-bottom:100px; background:var(--bg-main);}
+.wpage{display:none;} .wpage.active{display:block; animation:fadeUp 0.3s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
-    /* Booking Modal */
-    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); display:flex; align-items:flex-end; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.3s; z-index:100; }
-    .modal-bg.open { opacity:1; pointer-events:all; }
-    .modal { background:#1e1e24; width:100%; max-width:600px; border-radius:24px 24px 0 0; padding:30px 20px; transform:translateY(100%); transition:transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); max-height:88vh; overflow-y:auto;}
-    .modal-bg.open .modal { transform:translateY(0); }
+/* BOTTOM NAVIGATION */
+.bottom-nav { position:fixed; bottom:0; left:0; right:0; background:var(--card-bg); display:flex; justify-content:space-around; align-items:center; padding:10px 0; padding-bottom:calc(10px + env(safe-area-inset-bottom, 0px)); box-shadow:0 -5px 20px rgba(0, 0, 0, 0.08); z-index:20; border-top:1px solid var(--border-light);}
+.nav-item { display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--muted-dark); font-size:10px; font-weight:600; text-transform:uppercase; width:33.33%; padding:8px 0; transition:color 0.2s; cursor:pointer;}
+.nav-item .icon { font-size:22px; margin-bottom:2px; transition:transform 0.2s; }
+.nav-item.active { color:var(--nav-active); }
+.nav-item.active .icon { transform:translateY(-2px) scale(1.1); }
 
-    .form-group { margin-bottom:16px; }
-    .form-group label { display:block; font-size:12px; color:#a996cc; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px; }
-    .form-group input, .form-group textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:14px; border-radius:10px; font-size:16px; outline:none; font-family:'Outfit', sans-serif;}
-    .form-group input:focus, .form-group textarea:focus { border-color:#D1B888; }
-    .form-group textarea { resize:vertical; min-height:90px; }
-    .form-error { display:none; background:rgba(255,71,87,0.12); border:1px solid #ff4757; color:#ff8f94; font-size:13px; padding:11px 13px; border-radius:10px; margin-bottom:16px; }
-    .form-error.show { display:block; }
+/* CARDS & UI ELEMENTS */
+.mobile-card { background:var(--card-bg); border-radius:16px; padding:16px; margin-bottom:16px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); border:1px solid var(--border-light); position:relative;}
+.mobile-card.clickable:active { transform:scale(0.98); background:rgba(68,45,125,0.02); }
+.card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+.card-title { font-size:16px; font-weight:700; color:var(--text-dark); line-height:1.2; padding-right:10px;}
+.card-detail { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-dark); margin-bottom:6px; }
+.card-detail span { color:var(--muted-dark); width:20px; text-align:center; }
 
-    /* Private booking steps */
-    .step { display:none; animation:fadeIn 0.4s ease; }
-    .step.active { display:block; }
-    .step-head { margin-bottom:22px; }
-    .step-head h2 { font-size:20px; color:#fff; margin-bottom:6px; }
-    .step-head p { font-size:13px; color:#a996cc; line-height:1.5; }
-    .info-card { background:rgba(43,29,82,0.5); border:1px solid rgba(209,184,136,0.2); border-radius:14px; padding:16px; margin-bottom:18px; font-size:13px; color:#b0a3c9; line-height:1.7;}
-    .info-card strong { color:#D1B888; }
-    .success-icon { width:72px; height:72px; background:rgba(46, 213, 115, 0.12); color:#2ed573; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:34px; margin:24px auto 20px; border:1px solid rgba(46,213,115,0.4);}
+.btn{padding:14px 24px;border-radius:12px;border:none;font-size:15px;font-family:var(--font);font-weight:600;width:100%;text-align:center; display:flex; align-items:center; justify-content:center; gap:8px; transition:transform 0.1s; cursor:pointer;}
+.btn:active{transform:scale(0.98);}
+.btn-primary{background:var(--surface);color:var(--text-light);}
+.btn-accent{background:var(--accent);color:var(--surface); font-weight:700;}
+.btn-outline{background:transparent;color:var(--text-dark);border:2px solid var(--text-dark);}
+.btn-small{padding:8px 12px; font-size:12px; border-radius:8px;}
 
-    /* Ticket wallet (carousel) */
-    .ticket-slide { display:none; animation:slideIn 0.3s ease; width:100%; }
-    .ticket-slide.active { display:block; }
-    @keyframes slideIn { from {opacity:0; transform:scale(0.95);} to {opacity:1; transform:scale(1);} }
-    .ticket-box { background:#fff; border-radius:20px; padding:30px 20px; text-align:center; color:#111; box-shadow:0 10px 40px rgba(0,0,0,0.5); position:relative; overflow:hidden; width:100%; }
-    .ticket-box::before, .ticket-box::after { content:''; position:absolute; top:45%; width:30px; height:30px; background:#0a0514; border-radius:50%; transform:translateY(-50%); }
-    .ticket-box::before { left:-15px; }
-    .ticket-box::after { right:-15px; }
-    .ticket-divider { border-top:2px dashed #ccc; margin:20px 0; position:relative; top:-10px;}
-    .qr-container { background:#fff; padding:10px; border-radius:10px; display:inline-block; margin-bottom:20px; border:4px solid #f4f4f4;}
-    .qr-container img, .qr-container canvas { width:180px; height:180px; display:block; margin:0 auto; }
-    .nav-btn { background:rgba(209, 184, 136, 0.1); border:1px solid #D1B888; color:#D1B888; border-radius:50%; width:36px; height:36px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0;}
-    .nav-btn:active { background:#D1B888; color:#0a0514; }
-    .nav-dots { display:flex; gap:8px; justify-content:center; margin-top:20px; }
-    .dot { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,0.2); transition:background 0.3s;}
-    .dot.active { background:#D1B888; }
+.badge { padding:6px 10px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; flex-shrink:0;}
+.badge-public { background:var(--accent); color:var(--surface); }
+.badge-private { background:#d3f9d8; color:#2b8a3e; }
+.badge-pending { background:#ffe8cc; color:#e67700; }
+.badge-declined { background:#ffeaa7; color:var(--danger); }
 
-    .loader { border:4px solid rgba(209, 184, 136, 0.2); border-top:4px solid #D1B888; border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; margin:40px auto; }
-    @keyframes spin { 0% { transform:rotate(0deg);} 100% { transform:rotate(360deg);} }
+/* PROGRESS BARS */
+.progress-container { width: 100%; background: rgba(68,45,125,0.1); border-radius: 8px; height: 16px; overflow: hidden; margin-top: 8px; }
+.progress-bar { height: 100%; background: var(--success); transition: width 0.5s ease; }
+.progress-bar.personal { background: var(--surface); }
+
+/* STAFF LIST */
+.staff-list { margin-top:10px; display:flex; flex-direction:column; gap:10px;}
+.staff-item { display:flex; align-items:flex-start; gap:12px; padding:12px; background:var(--bg-main); border-radius:12px; border:1px solid var(--border-light);}
+.staff-avatar { width:36px; height:36px; border-radius:50%; background:var(--surface2); color:var(--text-light); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; flex-shrink:0; margin-top:2px;}
+.staff-info { flex:1; }
+.staff-name { font-size:14px; font-weight:700; color:var(--text-dark); margin-bottom:2px;}
+.staff-role { font-size:12px; color:var(--surface); font-weight:500; margin-bottom:4px;}
+.staff-time { font-size:10px; color:var(--muted-dark); display:block; margin-top:4px;}
+
+/* QR Modal & Others */
+#qrModal { display:none; position:fixed; inset:0; background:#000; z-index:2000; flex-direction:column; }
+#qrModal.active { display:flex; }
+#reader { width:100%; flex:1; background:#000;}
+
+.modal-bg{position:fixed;inset:0;background:rgba(0, 0, 0, 0.6); backdrop-filter:blur(5px); z-index:1000;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg-main); border-radius:24px 24px 0 0; padding:32px 24px calc(32px + env(safe-area-inset-bottom, 0px)); width:100%; max-height:85vh; overflow-y:auto; transform:translateY(100%); transition:transform .4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.modal-bg.open .modal{transform:translateY(0)}
+
+.form-group{margin-bottom:16px; text-align:left;}
+.form-group label{display:block;font-size:12px;color:var(--muted-dark);margin-bottom:6px; font-weight:600;}
+.form-group input, .form-group select {width:100%;background:var(--card-bg);border:1px solid var(--border-light);color:var(--text-dark);border-radius:12px;padding:16px; font-size:16px; font-family:var(--font); outline:none;}
+.form-group input:focus, .form-group select:focus {border-color:var(--accent);}
+
+.toast{position:fixed;top:env(safe-area-inset-top, 20px);left:50%;transform:translateX(-50%) translateY(-100px);background:var(--surface); color:var(--text-light); border-radius:12px;padding:14px 24px;font-size:14px;z-index:9999;transition:transform .4s cubic-bezier(0.2, 0.8, 0.2, 1); box-shadow:0 10px 30px rgba(0, 0, 0, 0.3); font-weight:600; width:90%; text-align:center;}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.error{background:var(--danger); color:#fff;}
 </style>
 </head>
 <body>
 
-<div class="bg-stars" id="star-bg"></div>
-
-<!-- 3D ENTRY SPLASH -->
-<div id="solar" onclick="dismissSplash()">
+<div class="screen" id="solar" onclick="dismissSplash()">
     <div id="three-container" style="position:absolute; inset:0; pointer-events:none;"></div>
     <div id="solar-ui">
         <div class="holo-text">
             <h1>HEITKAMP<br>PLANETARIUM</h1>
-            <p id="tap-text">TAP TO CONTINUE</p>
+            <p id="tap-text">TAP TO UNLOCK</p>
         </div>
     </div>
 </div>
 
-<header onclick="goFront()">
-    <h1>HEITKAMP PLANETARIUM</h1>
-    <p id="header-sub">Public Box Office</p>
-</header>
-
-<div class="container">
-
-    <div id="loading" class="view active">
-        <div class="loader"></div>
-        <p style="text-align:center; color:#a996cc; font-size:14px;">Syncing live schedule...</p>
-    </div>
-
-    <!-- FRONT PAGE -->
-    <div id="front" class="view">
-        <div class="front-tag">What brings you to the dome tonight?</div>
-        <button class="door" onclick="goView('storefront')">
-            <span class="door-icon">🎟️</span>
-            <div>
-                <h2>PUBLIC SHOWS</h2>
-                <p>Browse the schedule and reserve seats. QR tickets are emailed instantly.</p>
-            </div>
-        </button>
-        <button class="door" onclick="goView('booking')">
-            <span class="door-icon">🪐</span>
-            <div>
-                <h2>PRIVATE GROUP SHOW</h2>
-                <p>Schools, scouts & organizations — request a date for your own show.</p>
-            </div>
-        </button>
-        <p style="text-align:center; color:#6b5d8a; font-size:12px; margin-top:26px; line-height:1.7;">
-            Heitkamp Planetarium · behind King Christ Chapel<br>Up to 80 guests · handicap accessible
-        </p>
-    </div>
-
-    <!-- BOX OFFICE -->
-    <div id="storefront" class="view">
-        <button class="back-link" onclick="goFront()">← All options</button>
-        <h2 style="font-size:18px; margin-bottom:20px; color:#D1B888; font-family:'Orbitron', monospace;">UPCOMING SHOWS</h2>
-        <div id="shows-list"></div>
-    </div>
-
-    <!-- PRIVATE BOOKING -->
-    <div id="booking" class="view">
-        <button class="back-link" onclick="goFront()">← All options</button>
-
-        <div id="step1" class="step active">
-            <div class="step-head">
-                <h2>Request a Private Group Show</h2>
-                <p>Pick a date at least a week out so we can make the show truly special.</p>
-            </div>
-            <div class="info-card">
-                📍 <strong>Location</strong> — Heitkamp Planetarium, behind King Christ Chapel<br>
-                👥 <strong>Capacity</strong> — up to 80 attendees, handicap accessible<br>
-                ⏱️ <strong>Duration</strong> — standard shows run 45 minutes with Q&amp;A<br>
-                🎓 <strong>Customizable</strong> — topics tailored to your group's interests
-            </div>
-            <div class="form-group"><label>Preferred Date</label><input type="date" id="bookDate"></div>
-            <div class="form-group"><label>Preferred Time</label><input type="time" id="bookTime"></div>
-            <button class="btn" onclick="nextStep(1)">Next: Group Details →</button>
+<div class="screen hidden" id="login-screen">
+    <div id="view-login" style="width:100%; max-width:400px; display:flex; flex-direction:column; align-items:center;">
+        <div class="login-header">
+            <h2>WELCOME</h2>
+            <p>Staff Portal Login</p>
         </div>
-
-        <div id="step2" class="step">
-            <div class="step-head">
-                <h2>Tell us about your group</h2>
-                <p>We need a few details to prepare the best experience for you.</p>
+        
+        <div style="width:100%; background:var(--card-bg); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,0.1);">
+            <div class="form-group">
+                <label>Email / Username</label>
+                <input type="email" id="loginUsername" placeholder="e.g. jdoe@school.edu" autocomplete="username">
             </div>
-            <div class="form-error" id="bkError"></div>
-            <div class="form-group"><label>Group / School Name</label><input type="text" id="groupName" placeholder="e.g. Tri-State Homeschool"></div>
-            <div class="form-group"><label>Contact Person</label><input type="text" id="contactName" placeholder="First and last name"></div>
-            <div class="form-group"><label>Email Address</label><input type="email" id="contactEmail" placeholder="email@example.com"></div>
-            <div class="form-group"><label>Estimated Number of Attendees</label><input type="number" id="groupSize" placeholder="e.g. 45"></div>
-            <div class="form-group"><label>What topics are you interested in?</label><textarea id="topics" placeholder="e.g. Solar System, Constellations, Space Exploration..."></textarea></div>
-            <div style="display:flex; gap:12px;">
-                <button class="btn btn-ghost" style="flex:1;" onclick="prevStep(2)">← Back</button>
-                <button class="btn" style="flex:1.5;" id="submitBtn" onclick="submitGroupRequest()">Submit Request</button>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
             </div>
+            
+            <button class="btn btn-primary" style="margin-top:24px;" onclick="verifyLogin()" id="loginBtn">Login</button>
         </div>
+        
+        <button style="margin-top:30px; background:transparent; border:none; color:var(--accent); font-family:var(--font); font-size:14px; text-decoration:underline; cursor:pointer;" onclick="toggleRegisterView(true)">Create New Account</button>
+    </div>
 
-        <div id="step3" class="step" style="text-align:center;">
-            <div class="success-icon">✓</div>
-            <h2 style="font-size:24px; margin-bottom:14px;">Request Sent!</h2>
-            <p style="color:#a996cc; line-height:1.6; margin-bottom:26px; font-size:14px;">
-                Your request has been sent to the Planetarium staff for review.<br>
-                We'll contact you shortly at <strong id="confirmEmail" style="color:#D1B888;"></strong>.
-            </p>
-            <button class="btn btn-outline" onclick="goFront()">Back to Start</button>
+    <div id="view-register" style="width:100%; max-width:400px; display:none; flex-direction:column; align-items:center;">
+        <div class="login-header">
+            <h2>REGISTER</h2>
+            <p style="color:var(--text-light);">Create a new staff profile.</p>
+        </div>
+        
+        <div style="width:100%; background:var(--card-bg); padding:24px; border-radius:16px;">
+            <div class="form-group"><label>Full Name</label><input type="text" id="regName" placeholder="e.g. John Doe"></div>
+            <div class="form-group"><label>School Email</label><input type="email" id="regUsername" placeholder="e.g. jdoe@school.edu"></div>
+            <div class="form-group"><label>Create Password</label><input type="password" id="regPassword" placeholder="••••••••"></div>
+            <div class="form-group"><label>President's Invite Key</label><input type="text" id="regKey" placeholder="Enter secure key"></div>
+            
+            <button class="btn btn-primary" style="margin-top:20px;" onclick="submitRegistration()" id="regBtn">Create Account</button>
+            <button class="btn btn-outline" style="margin-top:10px; border-color:transparent; color:var(--muted-dark);" onclick="toggleRegisterView(false)">Cancel</button>
         </div>
     </div>
 
-    <!-- TICKET WALLET -->
-    <div id="ticket-view" class="view">
-        <div id="grouping-controls" style="display:none; text-align:center; margin-bottom:20px; background:rgba(43,29,82,0.6); padding:12px; border-radius:12px; border:1px solid rgba(209,184,136,0.3);">
-            <label style="font-size:12px; color:#D1B888; font-weight:700; margin-right:8px; text-transform:uppercase;">Display Tickets:</label>
-            <select id="group-select" onchange="renderTicketWallet()" style="background:rgba(0,0,0,0.5); color:#fff; border:1px solid #D1B888; padding:6px 12px; border-radius:8px; outline:none; font-family:'Outfit'; font-size:14px;"></select>
-        </div>
-
-        <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:15px;">
-            <button class="nav-btn" onclick="changeTicket(-1)" id="nav-left" style="visibility:hidden;">&#10094;</button>
-            <div id="ticket-carousel" style="flex:1; position:relative; min-width:0;"></div>
-            <button class="nav-btn" onclick="changeTicket(1)" id="nav-right" style="visibility:hidden;">&#10095;</button>
-        </div>
-
-        <div class="nav-dots" id="carousel-dots" style="display:none;"></div>
-        <p style="color:#a996cc; font-size:13px; text-align:center; margin-top:16px;" id="swipe-hint">Present to staff. Swipe to view other tickets.</p>
-        <button class="btn btn-outline" style="margin-top:30px;" onclick="goHome()">Browse More Shows</button>
+    <div id="cloud-syncing">
+        <div class="spinner"></div>
+        <h3 style="color:var(--text-light); font-family:var(--display); letter-spacing:1px; margin-bottom:8px;">Syncing with Cloud...</h3>
+        <p style="color:var(--accent); font-size:12px;">Saving changes directly to Sheets</p>
     </div>
-
 </div>
 
-<!-- SEAT RESERVATION MODAL -->
-<div class="modal-bg" id="bookingModal">
+<div id="qrModal">
+    <div style="padding:20px; padding-top:env(safe-area-inset-top, 20px); background:#111; color:#fff; display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="font-family:var(--font); font-weight:500;">Scan Ticket</h3>
+        <button onclick="closeScanner()" style="background:transparent; border:none; color:#fff; font-size:24px; cursor:pointer;">✖</button>
+    </div>
+    <div id="reader"></div>
+</div>
+
+<div class="screen hidden" id="worker">
+    <header class="app-header">
+        <div>
+            <h1>PLANETARIUM <div class="live-dot" id="liveIndicator" title="Live Sync Active"></div></h1>
+            <p id="w-name">Staff Portal</p>
+        </div>
+        <div id="w-avatar" class="staff-avatar" style="border:2px solid var(--accent); margin-top:0; color:#fff;">A</div>
+    </header>
+
+    <div class="worker-main" id="workerMain"></div>
+    <nav class="bottom-nav" id="bottomNav"></nav>
+</div>
+
+<div class="modal-bg" id="eventModal">
     <div class="modal">
-        <h3 style="font-size:22px; margin-bottom:4px; color:#D1B888;" id="book-title">Reserve Tickets</h3>
-        <p style="color:#a996cc; font-size:14px; margin-bottom:24px;" id="book-time">Date & Time</p>
-
-        <input type="hidden" id="book-id">
-        <input type="hidden" id="book-max">
-
-        <div class="form-error" id="modalError"></div>
-
-        <div style="display:flex; gap:16px;">
-            <div class="form-group" style="flex:2;">
-                <label>Full Name</label>
-                <input type="text" id="bName" placeholder="e.g. Jane Doe">
-            </div>
-            <div class="form-group" style="flex:1;">
-                <label>Seats</label>
-                <input type="number" id="bCount" min="1" value="1" style="text-align:center; font-weight:bold;">
-            </div>
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:20px;" id="eventModalTitle">Create Event</h3>
+        <input type="hidden" id="evId">
+        <input type="hidden" id="evType">
+        <div class="form-group"><label>Event Title / Group Name</label><input type="text" id="evTitle" placeholder="e.g. Stargazing Summit"></div>
+        
+        <div class="form-group" id="evContactGroup" style="display:none;"><label>Client Email (For Rescheduling)</label><input type="email" id="evContact" placeholder="e.g. client@email.com"></div>
+        
+        <div style="display:flex; gap:10px;">
+            <div class="form-group" style="flex:1;"><label>Date</label><input type="date" id="evDate"></div>
+            <div class="form-group" style="flex:1;"><label>Time</label><input type="time" id="evTime"></div>
         </div>
-
-        <div class="form-group">
-            <label>Email Address</label>
-            <input type="email" id="bEmail" placeholder="Where we send the tickets">
+        <div class="form-group"><label>Location / Topics</label><input type="text" id="evLoc" placeholder="e.g. Main Observatory"></div>
+        <div style="display:flex; gap:10px;">
+            <div class="form-group" style="flex:1;"><label>Expected Size</label><input type="number" id="evSpots" placeholder="0"></div>
+            <div class="form-group" style="flex:1;"><label>Max Capacity</label><input type="number" id="evMax" value="100"></div>
         </div>
-
-        <div style="display:flex; gap:12px; margin-top:30px;">
-            <button class="btn btn-outline" style="flex:1;" onclick="closeBookingModal()">Cancel</button>
-            <button class="btn" style="flex:1.5;" onclick="submitBooking()" id="confirmBtn">Confirm Reservation</button>
+        <div style="display:flex; gap:12px; margin-top:20px;" id="eventModalActions">
+            <button class="btn btn-outline" style="flex:1; border-color:var(--danger); color:var(--danger); display:none;" id="btnDeleteEvent" onclick="deleteEvent()">Delete</button>
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal('eventModal')">Cancel</button>
+            <button class="btn btn-primary" style="flex:1.5;" onclick="saveEvent()">Save Event</button>
         </div>
     </div>
 </div>
+
+<div class="modal-bg" id="manualTimeModal">
+    <div class="modal">
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:20px;">Log Past Shift</h3>
+        <div class="form-group"><label>Date Worked</label><input type="date" id="manualDate"></div>
+        <div class="form-group"><label>Hours Worked</label><input type="number" id="manualHours" placeholder="e.g. 2.5" step="0.25"></div>
+        <div style="display:flex; gap:12px; margin-top:20px;">
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal('manualTimeModal')">Cancel</button>
+            <button class="btn btn-primary" style="flex:1.5;" onclick="saveManualTime()">Save Hours</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-bg" id="editMaxHoursModal">
+    <div class="modal">
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:20px;">Edit Department Max Hours</h3>
+        <div class="form-group"><label>Total Approved Hours</label><input type="number" id="maxHoursInput" placeholder="e.g. 1000"></div>
+        <div style="display:flex; gap:12px; margin-top:20px;">
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal('editMaxHoursModal')">Cancel</button>
+            <button class="btn btn-primary" style="flex:1.5;" onclick="saveMaxHours()">Save</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-bg" id="passwordModal">
+    <div class="modal">
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:8px; text-align:center;">Change Password</h3>
+        <p style="color:var(--muted-dark); font-size:14px; margin-bottom:24px; text-align:center;">Enter your new secure password.</p>
+        <div class="form-group">
+            <input type="password" id="newPasswordInput" placeholder="••••••••" style="text-align:center; font-size:20px;">
+        </div>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:32px;">
+            <button class="btn btn-primary" onclick="saveNewPassword()">Save Password</button>
+            <button class="btn btn-outline" onclick="closeModal('passwordModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-bg" id="keyModal">
+    <div class="modal">
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:8px; text-align:center;">Registration Key</h3>
+        <p style="color:var(--muted-dark); font-size:14px; margin-bottom:24px; text-align:center;">Give this key to new staff members so they can create an account.</p>
+        <div class="form-group">
+            <input type="text" id="newKeyInput" placeholder="e.g. STARLIGHT" style="text-align:center; font-size:24px; font-weight:700;">
+        </div>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:32px;">
+            <button class="btn btn-primary" onclick="saveNewKey()">Save Invite Key</button>
+            <button class="btn btn-outline" onclick="closeModal('keyModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-bg" id="roleModal">
+    <div class="modal">
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:20px;">Manage Staff Positions</h3>
+        <p style="color:var(--muted-dark); font-size:13px; margin-bottom:16px;">Promote, demote, or permanently remove staff.</p>
+        
+        <div id="roleList" style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
+            </div>
+        
+        <div style="display:flex; gap:12px; margin-top:24px;">
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal('roleModal')">Cancel</button>
+            <button class="btn btn-primary" style="flex:1.5;" onclick="saveRoles()">Save Roles</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <script>
-// ==========================================
-const API_URL = "https://script.google.com/macros/s/AKfycbz55rmtgwmQwJlZWKQYx2LoFoBmBXUFAUeqKhJR3xLcmvV5UsSou8-IP5ciucVfK-Yx7Q/exec";
-const REFRESH_MS = 30000;
-// ==========================================
+// ============================================================================
+// CLOUD BACKEND SETUP & TWO-WAY SYNC
+// ============================================================================
+// 🔴 IMPORTANT: Paste the Web App URL from Phase 1 Step 2 here:
+const API_URL = "https://script.google.com/macros/s/AKfycbz55rmtgwmQwJlZWKQYx2LoFoBmBXUFAUeqKhJR3xLcmvV5UsSou8-IP5ciucVfK-Yx7Q/exec"; 
+const SYNC_INTERVAL_MS = 10000;
+// 🔑 LOGIN TOGGLE — set to true to re-enable the login screen (currently bypassed).
+const LOGIN_ENABLED = false;
+let APP = {
+    events: [],
+    requests: [],
+    time: { total: 0, max: 1000 },
+    timeLogs: [],
+    users: [
+        {id:1, name:'Alice President', role:'president', username:'alice@school.edu', password:'password123', darkMode: false} 
+    ],
+    settings: { inviteKey: 'STARLIGHT', notifsEnabled: true, pauseShows: false },
+    currentUser: null
+};
 
-let publicShows = [];
-let ticketDataGlobal = {};
-let currentTicketIndex = 0;
-let slidesCount = 1;
-let touchstartX = 0, touchendX = 0;
+let isClockedIn = false;
+let clockInTime = null;
 
-/* ---------------- formatting ---------------- */
-function formatEventDate(rawDate) {
-    if(!rawDate) return 'TBD';
-    const dateStr = String(rawDate).split('T')[0];
-    let d;
-    if (dateStr.includes('/')) {
-        const parts = dateStr.split('/');
-        if(parts.length === 3) d = new Date(parts[2], parts[0]-1, parts[1]);
-    } else if (dateStr.includes('-')) {
-        const parts = dateStr.split('-');
-        if(parts.length === 3) d = new Date(parts[0], parts[1]-1, parts[2]);
+let currentAppPage = 'events';
+let currentDetailId = null; 
+let currentDetailType = null;
+let lastKnownDataHash = "";
+let syncIntervalTimer = null;
+let html5QrcodeScanner = null;
+let isSyncing = false;
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+function sanitize(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validateFutureDate(dateStr) {
+    const inputDate = new Date(dateStr + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return inputDate >= today;
+}
+
+function setLoading(btnId, isLoading) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.style.opacity = isLoading ? '0.6' : '1';
+}
+
+function isEventInFuture(dateStr, timeStr) {
+    if (!dateStr) return false;
+    const eventDate = new Date(dateStr + (timeStr ? 'T' + timeStr : 'T00:00:00'));
+    return eventDate > new Date();
+}
+
+// ============================================================================
+// CLOUD SYNC
+// ============================================================================
+async function pushCloudData() {
+    if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
+        console.warn("API_URL not set. Skipping cloud sync.");
+        return;
     }
-    if (d && !isNaN(d.getTime())) return d.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' });
-    return dateStr;
+
+    const serialize = (arr) => arr.map(item => ({
+        ...item,
+        assignments: typeof item.assignments === 'string' 
+            ? item.assignments 
+            : JSON.stringify(item.assignments || [])
+    }));
+
+    const payload = {
+        users: APP.users,
+        events: serialize(APP.events),
+        requests: serialize(APP.requests),
+        time: APP.time,
+        timeLogs: APP.timeLogs,
+        settings: APP.settings
+    };
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message);
+        document.getElementById('liveIndicator')?.classList.remove('offline');
+        console.log("Cloud sync successful");
+    } catch (err) {
+        console.error("Cloud sync failed:", err);
+        document.getElementById('liveIndicator')?.classList.add('offline');
+        showToast("Sync failed. Changes saved locally.", "error");
+    }
 }
-function formatTime(timeStr) {
-    if(!timeStr) return 'TBD';
-    const [h, m] = timeStr.split(':');
-    if(!h || !m) return timeStr;
-    const hh = parseInt(h);
-    return `${hh % 12 || 12}:${m} ${hh >= 12 ? 'PM' : 'AM'}`;
-}
-function isUpcoming(ev) {
-    const d = new Date(String(ev.date).split('T')[0] + (ev.time ? 'T' + ev.time : 'T23:59:59'));
-    const now = new Date();
-    return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
+function parseAssignments(val) {
+    if (!val) return [];
+    if (typeof val === 'string') { try { return JSON.parse(val); } catch(e) { return []; } }
+    return Array.isArray(val) ? val : [];
 }
 
-/* ---------------- stars ---------------- */
-const starBg = document.getElementById('star-bg');
-for(let i=0; i<50; i++) {
-    let star = document.createElement('div');
-    star.className = 'star';
-    star.style.width = Math.random() * 3 + 'px'; star.style.height = star.style.width;
-    star.style.left = Math.random() * 100 + 'vw'; star.style.top = Math.random() * 100 + 'vh';
-    star.style.animationDuration = (Math.random() * 3 + 1) + 's'; star.style.animationDelay = (Math.random() * 2) + 's';
-    starBg.appendChild(star);
+async function backgroundSync(forceRender = false) {
+    if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") return;
+    try {
+        const response = await fetch(API_URL);
+        const data = await response.json();
+        const currentDataHash = JSON.stringify(data);
+        if (currentDataHash !== lastKnownDataHash || forceRender) {
+            console.log("Cloud synced successfully.");
+            lastKnownDataHash = currentDataHash;
+            if (data.events) APP.events = data.events.map(e => ({...e, assignments: parseAssignments(e.assignments)}));
+            if (data.requests) APP.requests = data.requests.map(r => ({...r, assignments: parseAssignments(r.assignments)}));
+            if (data.time) APP.time = { total: parseFloat(data.time.total)||0, max: parseFloat(data.time.max)||1000 };
+            if (data.timeLogs) APP.timeLogs = data.timeLogs;
+            if (data.users && data.users.length > 0) {
+                    APP.users = data.users;
+            }
+            
+            APP.settings = data.settings || { inviteKey: 'STARLIGHT', notifsEnabled: true, pauseShows: false };
+            
+            if (APP.currentUser) {
+                const cloudUser = APP.users.find(u => u.id === APP.currentUser.id);
+                if (cloudUser) {
+                    APP.currentUser = { ...cloudUser, password: APP.currentUser.password || cloudUser.password };
+                }
+                applyTheme();
+                renderCurrentPage(); 
+            }
+        }
+        document.getElementById('liveIndicator')?.classList.remove('offline');
+    } catch (err) {
+        document.getElementById('liveIndicator')?.classList.add('offline');
+    }
 }
 
-/* ============================================================================
-   3D INTERACTIVE SPLASH SCREEN — identical to Staff App
-============================================================================ */
+
+
+// ============================================================================
+// 3D INTERACTIVE SPLASH SCREEN
+// ============================================================================
 let scene, camera, renderer, earthGroup, planetMesh, clouds, stars;
-let moonData = [];
-let mouseX = 0, mouseY = 0;
-let windowHalfX = window.innerWidth / 2, windowHalfY = window.innerHeight / 2;
+let moonData = []; 
+let mouseX = 0; let mouseY = 0;
+let windowHalfX = window.innerWidth / 2; let windowHalfY = window.innerHeight / 2;
 
 const PLANET_OPTIONS = [
     { name: 'Mercury', map: 'mercury.jpg', hasClouds: false, atmosphereColor: 0x444444, hasRings: false, moons: [] },
@@ -341,7 +497,7 @@ const PLANET_OPTIONS = [
     { name: 'Mars', map: 'mars.jpg', hasClouds: false, atmosphereColor: 0xff6633, hasRings: false, moons: [ { radius: 0.5, distance: 13, speed: 0.02, color: 0xaaaaaa, map: 'phobos.jpg' }, { radius: 0.3, distance: 16, speed: 0.015, color: 0xaaaaaa, map: 'deimos.jpg' } ] },
     { name: 'Jupiter', map: 'jupiter.jpg', hasClouds: false, atmosphereColor: 0xffccaa, hasRings: false, moons: [ { radius: 1.2, distance: 16, speed: 0.015, color: 0xddddaa, map: 'io.jpg' }, { radius: 1.0, distance: 19, speed: 0.012, color: 0xffffff, map: 'europa.jpg' }, { radius: 1.8, distance: 23, speed: 0.009, color: 0xbbbbbb, map: 'ganymede.jpg' }, { radius: 1.5, distance: 28, speed: 0.007, color: 0x888888, map: 'callisto.jpg' } ] },
     { name: 'Saturn', map: 'saturn.jpg', hasClouds: false, hasRings: true, ringMap: 'saturn_rings.png', ringInner: 12, ringOuter: 22, ringOpacity: 0.9, atmosphereColor: 0xeeddcc, moons: [ { radius: 0.6, distance: 25, speed: 0.018, color: 0xaaaaaa, map: 'enceladus.jpg' }, { radius: 0.8, distance: 28, speed: 0.014, color: 0xcccccc, map: 'tethys.jpg' }, { radius: 2.0, distance: 33, speed: 0.010, color: 0xffaa66, map: 'titan.jpg' }, { radius: 0.5, distance: 37, speed: 0.008, color: 0xaaaaaa, map: 'iapetus.jpg' } ] },
-    { name: 'Uranus', map: 'uranus.jpg', hasClouds: false, hasRings: true, ringInner: 14, ringOuter: 18, ringOpacity: 0.5, ringColor: 0x66ccff, atmosphereColor: 0x66ccff, moons: [ { radius: 0.7, distance: 21, speed: 0.012, color: 0xaaaaaa, map: 'titania.jpg' }, { radius: 0.6, distance: 24, speed: 0.010, color: 0x999999, map: 'oberon.jpg' } ] },
+    { name: 'Uranus', map: 'uranus.jpg', hasClouds: false, hasRings: true, ringMap: 'uranus_rings.png', ringInner: 14, ringOuter: 18, ringOpacity: 0.5, atmosphereColor: 0x66ccff, moons: [ { radius: 0.7, distance: 21, speed: 0.012, color: 0xaaaaaa, map: 'titania.jpg' }, { radius: 0.6, distance: 24, speed: 0.010, color: 0x999999, map: 'oberon.jpg' } ] },
     { name: 'Neptune', map: 'neptune.jpg', hasClouds: false, atmosphereColor: 0x3366ff, hasRings: false, moons: [ { radius: 1.2, distance: 18, speed: 0.015, color: 0xcccccc, map: 'triton.jpg' } ] },
     { name: 'Pluto', map: 'pluto.jpg', hasClouds: false, atmosphereColor: 0xcccccc, hasRings: false, moons: [ { radius: 6, distance: 35, speed: 0.005, color: 0x999999, map: 'charon.jpg' } ] }
 ];
@@ -351,22 +507,25 @@ const atmosphereFragmentShader = `varying vec3 vNormal; uniform vec3 glowColor; 
 
 function init3D() {
     const container = document.getElementById('three-container');
-    scene = new THREE.Scene();
+    scene = new THREE.Scene(); 
     camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+    // Check if the screen is narrow (mobile)
     const isMobile = window.innerWidth < 768;
-    const cameraZ = isMobile ? 70 : 45;
-    const cameraY = isMobile ? 2 : 5;
 
-    camera.position.set(0, cameraY, cameraZ);
+    // Adjust camera distance: 45 for desktop, 70 for mobile (further back)
+    const cameraZ = isMobile ? 70 : 45;
+    const cameraY = isMobile ? 2 : 5; // Lower height for mobile
+
+camera.position.set(0, cameraY, cameraZ); 
     renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(window.innerWidth, window.innerHeight); 
     container.appendChild(renderer.domElement);
 
-    const starGeo = new THREE.BufferGeometry();
+    const starGeo = new THREE.BufferGeometry(); 
     const starPos = new Float32Array(2500 * 3);
-    for(let i=0; i<7500; i++) starPos[i] = (Math.random() - 0.5) * 500;
+    for(let i=0; i<7500; i++) starPos[i] = (Math.random() - 0.5) * 500; 
     starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-
+    
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
     const context = canvas.getContext('2d');
@@ -378,10 +537,10 @@ function init3D() {
     const starTexture = new THREE.CanvasTexture(canvas);
 
     stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 0.8, map: starTexture, depthWrite: false }));
-    scene.add(stars);
+    scene.add(stars); 
 
-    scene.add(new THREE.AmbientLight(0x111111));
-    const sunLight = new THREE.DirectionalLight(0xffeedd, 2.0);
+    scene.add(new THREE.AmbientLight(0x111111)); 
+    const sunLight = new THREE.DirectionalLight(0xffeedd, 2.0); 
     sunLight.position.set(20, 10, 15);
     scene.add(sunLight);
 
@@ -450,16 +609,20 @@ function onTouchMove(e) { mouseX = (e.touches[0].clientX - windowHalfX) * 0.002;
 function onWindowResize() {
     windowHalfX = window.innerWidth / 2;
     windowHalfY = window.innerHeight / 2;
+    
     camera.aspect = window.innerWidth / window.innerHeight;
+    
+    // Dynamically adjust distance on resize
     const dist = window.innerWidth < 768 ? 70 : 45;
     camera.position.z = dist;
+    
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
-function animate() {
-    requestAnimationFrame(animate);
+function animate() { 
+    requestAnimationFrame(animate); 
     if(planetMesh) planetMesh.rotation.y += 0.002;
-    if(clouds) clouds.rotation.y += 0.0025;
+    if(clouds) clouds.rotation.y += 0.0025; 
     if(stars) stars.rotation.y += 0.0002;
     moonData.forEach(m => { m.pivot.rotation.y -= m.speed; m.mesh.rotation.y += 0.005; });
     camera.position.x += (mouseX * 15 - camera.position.x) * 0.05;
@@ -467,377 +630,1125 @@ function animate() {
     camera.lookAt(scene.position);
     earthGroup.rotation.x += (mouseY - earthGroup.rotation.x) * 0.05;
     earthGroup.rotation.y += (mouseX - earthGroup.rotation.y) * 0.05;
-    renderer.render(scene, camera);
+    renderer.render(scene, camera); 
 }
 
-/* ---------------- splash & navigation ---------------- */
-let splashDone = false;
+// ============================================================================
+// SPLASH & SYNC LOGIC
+// ============================================================================
+
 function dismissSplash() {
-    if (splashDone) return;
-    splashDone = true;
+    if(isSyncing) return;
+    isSyncing = true;
+    
     const tapText = document.getElementById('tap-text');
-    tapText.textContent = "OPENING THE DOME...";
-    tapText.style.color = "#2ed573";
+    tapText.textContent = "SYNCING WITH CLOUD...";
+    tapText.style.color = "var(--success)";
     tapText.style.animation = "pulse-fast 0.5s infinite";
 
     setTimeout(() => {
-        document.getElementById('solar-ui').style.opacity = '0';
-        document.getElementById('solar').classList.add('hidden');
-        setTimeout(() => document.getElementById('solar').classList.add('gone'), 400);
-    }, 300);
+        backgroundSync(true).then(() => { finishSplashTransition(); }).catch(err => { finishSplashTransition(); });
+    }, 100);
 }
 
-function goView(id) {
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    const subs = { front: 'Public Box Office', storefront: 'Public Box Office & Ticketing', booking: 'Private Group Requests', 'ticket-view': 'Your Tickets' };
-    document.getElementById('header-sub').textContent = subs[id] || 'Public Box Office';
-    window.scrollTo(0, 0);
-}
-function goFront() { goView('front'); }
-function goHome() { window.location.href = window.location.pathname; }
+function finishSplashTransition() {
+    document.getElementById('solar-ui').style.opacity = '0';
+    document.getElementById('solar').classList.add('hidden');
 
-/* ---------------- storefront ---------------- */
-async function fetchShows() {
-    try {
-        const res = await fetch(API_URL);
-        const data = await res.json();
-        publicShows = (data.events || [])
-            .filter(e => !e.archived && isUpcoming(e))
-            .sort((a,b) => new Date(a.date) - new Date(b.date));
-        renderShows();
-    } catch(err) {
-        document.getElementById('shows-list').innerHTML = "<p style='text-align:center; color:#ff4757;'>Unable to load schedule. Check your connection and pull to refresh.</p>";
-    }
-}
-
-function renderShows() {
-    const list = document.getElementById('shows-list');
-    if(publicShows.length === 0) {
-        list.innerHTML = "<p style='color:#a996cc; text-align:center; padding:40px 20px; background:rgba(255,255,255,0.05); border-radius:16px;'>No public shows are currently scheduled. Check back soon!</p>";
+    // ── LOGIN DISABLED PATH ──────────────────────────────────────────
+    // backgroundSync(true) already ran in dismissSplash(), so APP.users
+    // is populated here. Sign in automatically and skip the login screen.
+    if (!LOGIN_ENABLED) {
+        let autoUser = null;
+        const saved = localStorage.getItem('planetarium_user');
+        if (saved) { try { autoUser = JSON.parse(saved); } catch(e) { localStorage.removeItem('planetarium_user'); } }
+        if (autoUser) {
+            const cloudUser = APP.users.find(u => u.id === autoUser.id);
+            if (cloudUser) autoUser = { ...cloudUser, password: autoUser.password || cloudUser.password };
+        } else {
+            autoUser = APP.users.find(u => u.role === 'president' || u.role === 'manager') || APP.users[0];
+        }
+        if (!autoUser) {
+            autoUser = { id: 1, name: 'Planetarium Admin', role: 'president', username: 'admin@planetarium', password: 'password123', darkMode: false };
+            APP.users.push(autoUser);
+        }
+        APP.currentUser = autoUser;
+        if (!APP.users.find(u => u.id === autoUser.id)) APP.users.push(autoUser);
+        applyTheme();
+        initWorkerApp();
+        setTimeout(() => {
+            document.getElementById('solar').classList.add('gone');
+            showScreen('worker');
+        }, 400);
+        startSyncIntervals();
+        setTimeout(() => backgroundSync(true), 500);
         return;
     }
+    // ── END LOGIN DISABLED PATH ──────────────────────────────────────
 
-    let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
-
-    list.innerHTML = publicShows.map(show => {
-        const deviceReserved = localBookings[show.id] || 0;
-        const available = Math.max(0, show.max - (show.reserved || 0) - (show.scanned || 0) - deviceReserved);
-
-        let badgeHTML = `<div class="capacity-badge">${available} Seats Left</div>`;
-        if (available <= 0) badgeHTML = `<div class="capacity-badge sold-out">SOLD OUT</div>`;
-
-        return `
-        <div class="show-card">
-            ${badgeHTML}
-            <div class="show-title">${show.title}</div>
-            <div class="show-details">📅 ${formatEventDate(show.date)}</div>
-            <div class="show-details">🕒 ${formatTime(show.time)}</div>
-            <div class="show-details">📍 ${show.location || 'Main Dome'}</div>
-
-            ${available > 0
-                ? `<button class="btn btn-small" style="margin-top:20px;" onclick="openBooking('${show.id}', ${available})">Reserve Tickets</button>`
-                : `<button class="btn btn-small btn-outline" style="margin-top:20px; opacity:0.5; cursor:not-allowed;" disabled>Sold Out</button>`}
-        </div>`;
-    }).join('');
-}
-
-/* ---------------- seat reservation ---------------- */
-function openBooking(id, availableSeats) {
-    const show = publicShows.find(s => s.id == id);
-    if(!show) return;
-
-    document.getElementById('book-id').value = show.id;
-    document.getElementById('book-max').value = availableSeats;
-    document.getElementById('bCount').value = 1;
-    document.getElementById('bCount').max = availableSeats;
-
-    document.getElementById('book-title').textContent = show.title;
-    document.getElementById('book-time').textContent = `${formatEventDate(show.date)} @ ${formatTime(show.time)}`;
-    document.getElementById('modalError').classList.remove('show');
-    document.getElementById('bookingModal').classList.add('open');
-}
-function closeBookingModal() { document.getElementById('bookingModal').classList.remove('open'); }
-
-function modalError(msg) {
-    const e = document.getElementById('modalError');
-    e.textContent = msg;
-    e.classList.add('show');
-}
-
-async function submitBooking() {
-    const btn = document.getElementById('confirmBtn');
-    if (btn.disabled) return;
-
-    const evId = document.getElementById('book-id').value;
-    const maxAllowed = parseInt(document.getElementById('book-max').value);
-    const name = document.getElementById('bName').value.trim();
-    const email = document.getElementById('bEmail').value.trim();
-    const count = parseInt(document.getElementById('bCount').value);
-
-    if(!name) return modalError("Please enter your name.");
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return modalError("Please enter a valid email address.");
-    if(!count || count < 1 || count > maxAllowed) return modalError(`Please select 1 to ${maxAllowed} seats.`);
-
-    const show = publicShows.find(s => s.id == evId);
-    if(!show) return modalError("That show is no longer available.");
-
-    btn.disabled = true;
-    btn.textContent = 'Processing...';
-
-    try {
-        const payload = {
-            action: 'reserve_seats',
-            eventId: evId,
-            count: count,
-            publicAppUrl: window.location.href.split('?')[0],
-            emailData: {
-                name: name,
-                email: email,
-                showTitle: show.title,
-                showDate: `${formatEventDate(show.date)} @ ${formatTime(show.time)}`
+    const savedSession = localStorage.getItem('planetarium_user');
+    if(savedSession) {
+        try {
+            const parsedUser = JSON.parse(savedSession);
+            
+            // Use saved session directly — don't depend on APP.users being populated yet
+            // APP.users only has default data at this point; cloud sync hasn't run
+            APP.currentUser = parsedUser;
+            
+            // Ensure user exists in APP.users so the app functions properly
+            // (initWorkerApp() and other functions reference APP.users)
+            const existsInUsers = APP.users.find(u => u.id === parsedUser.id);
+            if (!existsInUsers) {
+                APP.users.push(parsedUser);
             }
-        };
-
-        await fetch(API_URL, {
-            method: 'POST',
-            redirect: 'follow',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
-        });
-
-        let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
-        localBookings[evId] = (localBookings[evId] || 0) + count;
-        localStorage.setItem('planetarium_bookings', JSON.stringify(localBookings));
-
-        closeBookingModal();
-        const ticketUrl = `${window.location.pathname}?ticket=${evId}&name=${encodeURIComponent(name)}&title=${encodeURIComponent(show.title)}&date=${encodeURIComponent(show.date)}&time=${encodeURIComponent(show.time || '')}&count=${count}`;
-        window.location.href = ticketUrl;
-    } catch(e) {
-        modalError("Connection failed — your seats were NOT booked. Please try again.");
-        btn.disabled = false;
-        btn.textContent = 'Confirm Reservation';
-    }
-}
-
-/* ---------------- private group request ---------------- */
-function nextStep(current) {
-    if(current === 1) {
-        if(!document.getElementById('bookDate').value || !document.getElementById('bookTime').value) {
-            alert("Please select a date and time.");
-            return;
+            
+            applyTheme();
+            initWorkerApp();
+            
+            setTimeout(() => { 
+                document.getElementById('solar').classList.add('gone'); 
+                showScreen('worker'); 
+            }, 400);
+            
+            // Start sync intervals
+            startSyncIntervals();
+            
+            // Immediate background sync to fetch full data from cloud
+            // This will merge in the full user data (including any cloud updates)
+            setTimeout(() => backgroundSync(true), 500);
+            return; 
+        } catch(e) {
+            console.error("Session restore failed:", e);
+            localStorage.removeItem('planetarium_user');
         }
     }
-    document.getElementById(`step${current}`).classList.remove('active');
-    document.getElementById(`step${current + 1}`).classList.add('active');
+
+    setTimeout(() => { 
+        document.getElementById('solar').classList.add('gone'); 
+        showScreen('login-screen'); 
+    }, 400);
+    isSyncing = false; 
 }
-function prevStep(current) {
-    document.getElementById(`step${current}`).classList.remove('active');
-    document.getElementById(`step${current - 1}`).classList.add('active');
+function startSyncIntervals() {
+    if (syncIntervalTimer) clearInterval(syncIntervalTimer);
+    syncIntervalTimer = setInterval(backgroundSync, SYNC_INTERVAL_MS);
+    
+    if (window.timeclockInterval) clearInterval(window.timeclockInterval);
+    window.timeclockInterval = setInterval(timeclockLoop, 60000);
+}
+// ============================================================================
+// LOGIN, REGISTRATION & THEME LOGIC
+// ============================================================================
+
+function toggleRegisterView(showReg) {
+    document.getElementById('view-login').style.display = showReg ? 'none' : 'flex';
+    document.getElementById('view-register').style.display = showReg ? 'flex' : 'none';
 }
 
-async function submitGroupRequest() {
-    const btn = document.getElementById('submitBtn');
-    if (btn.disabled) return;
+function applyTheme() {
+    if (APP.currentUser && (APP.currentUser.darkMode === true || APP.currentUser.darkMode === "TRUE")) {
+        document.body.classList.add('dark-mode');
+    } else {
+        document.body.classList.remove('dark-mode');
+    }
+}
 
-    const group = document.getElementById('groupName').value.trim();
-    const contact = document.getElementById('contactName').value.trim();
-    const email = document.getElementById('contactEmail').value.trim();
-    const size = document.getElementById('groupSize').value;
-    const date = document.getElementById('bookDate').value;
-    const time = document.getElementById('bookTime').value;
-    const topics = document.getElementById('topics').value.trim() || "General Show";
+async function toggleDarkMode(isDark) {
+    APP.currentUser.darkMode = isDark;
+    const sessionUser = { ...APP.currentUser };
+    delete sessionUser.password;
+    localStorage.setItem('planetarium_user', JSON.stringify(sessionUser));
+    const cloudUser = APP.users.find(u => u.id === APP.currentUser.id);
+    if(cloudUser) cloudUser.darkMode = isDark;
+    applyTheme();
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
 
-    const errEl = document.getElementById('bkError');
-    errEl.classList.remove('show');
-    const fail = (msg) => { errEl.textContent = msg; errEl.classList.add('show'); };
+async function verifyLogin() {
+    const userIn = document.getElementById('loginUsername').value.trim();
+    const passIn = document.getElementById('loginPassword').value;
 
-    if(!group || !contact || !email || !size || !date || !time) return fail("Please fill out all required fields.");
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("Please enter a valid email address.");
+    if(!userIn || !passIn) return showToast('Please enter both email and password.', 'error');
 
-    const payload = {
-        action: "submitBooking",
-        id: Math.floor(Math.random() * 1000000),
-        group, contact, email, date, time,
-        size: parseInt(size),
-        topics,
-        status: "pending"
+    setLoading('loginBtn', true);
+    
+    const user = APP.users.find(u => 
+        (u.username || '').toLowerCase() === userIn.toLowerCase() && 
+        u.password === passIn
+    );
+    
+    if(user) {
+        document.getElementById('loginUsername').value = '';
+        document.getElementById('loginPassword').value = '';
+
+        const sessionUser = { ...user };
+        delete sessionUser.password;
+        
+        APP.currentUser = user; 
+        localStorage.setItem('planetarium_user', JSON.stringify(sessionUser)); 
+        applyTheme(); 
+        initWorkerApp(); 
+        showScreen('worker');
+        startSyncIntervals();
+    } else {
+        if(navigator.vibrate) navigator.vibrate([200]); 
+        showToast('Incorrect Email or Password', 'error'); 
+    }
+    
+    setLoading('loginBtn', false);
+}
+
+async function submitRegistration() {
+    const name = document.getElementById('regName').value.trim();
+    const username = document.getElementById('regUsername').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const key = document.getElementById('regKey').value;
+
+    if(!name || !username || !password || !key) return showToast("Please fill out all fields", "error");
+    if(!validateEmail(username)) return showToast("Please enter a valid email address", "error");
+    if(password.length < 6) return showToast("Password must be at least 6 characters", "error");
+    if(key.toLowerCase() !== APP.settings.inviteKey.toLowerCase()) return showToast("Invalid President's Invite Key", "error");
+    
+    if(APP.users.find(u => (u.username || '').toLowerCase() === username.toLowerCase())) {
+        return showToast("That Email is already registered. Choose another.", "error");
+    }
+
+    setLoading('regBtn', true);
+    
+    const newUser = { 
+        id: Date.now(),
+        name: name, 
+        role: 'staff', 
+        username: username,
+        password: password, 
+        darkMode: false 
     };
+    
+    APP.users.push(newUser);
+    
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
 
-    btn.disabled = true;
-    btn.textContent = 'Sending Request...';
+    showToast("Account Created! Logging you in...", "success");
+    
+    ['regName', 'regUsername', 'regPassword', 'regKey'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
 
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            redirect: 'follow',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
+    const sessionUser = { ...newUser };
+    delete sessionUser.password;
+    
+    APP.currentUser = newUser;
+    localStorage.setItem('planetarium_user', JSON.stringify(sessionUser)); 
+    applyTheme();
+    toggleRegisterView(false);
+    initWorkerApp(); 
+    showScreen('worker');
+    
+    startSyncIntervals();
+    setLoading('regBtn', false);
+}
+
+// ============================================================================
+// APP NAVIGATION & FORMATTING HELPERS
+// ============================================================================
+function showScreen(id) {
+    ['solar','login-screen','worker'].forEach(s => document.getElementById(s).classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden', 'gone');
+}
+
+function doLogout() {
+    if (!LOGIN_ENABLED) return showToast("Login is currently disabled.", "error");
+    APP.currentUser = null;
+    localStorage.removeItem('planetarium_user'); 
+    document.body.classList.remove('dark-mode'); 
+    
+    if (syncIntervalTimer) clearInterval(syncIntervalTimer);
+    if (window.timeclockInterval) clearInterval(window.timeclockInterval);
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.stop().catch(() => {});
+    }
+    isClockedIn = false;
+    clockInTime = null;
+    
+    showScreen('login-screen'); 
+}
+
+function initWorkerApp() {
+    document.getElementById('w-name').textContent = `Hello, ${APP.currentUser.name.split(' ')[0]}`;
+    document.getElementById('w-avatar').textContent = APP.currentUser.name.charAt(0).toUpperCase();
+    
+    let navHTML = `
+        <div class="nav-item" onclick="wNav('events', this)"><div class="icon">📅</div>Schedule</div>
+        <div class="nav-item" onclick="wNav('time', this)"><div class="icon">⏱️</div>Timeclock</div>
+        <div class="nav-item" onclick="wNav('settings', this)"><div class="icon">⚙️</div>Settings</div>
+    `;
+    document.getElementById('bottomNav').innerHTML = navHTML;
+    wNav('events', null); 
+}
+
+function wNav(page, element) {
+    currentAppPage = page;
+    currentDetailId = null; currentDetailType = null; 
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if (element) { element.classList.add('active'); } 
+    else {
+        const items = document.querySelectorAll('.nav-item');
+        if(page === 'events' && items.length > 0) items[0].classList.add('active');
+        if(page === 'time' && items.length > 1) items[1].classList.add('active');
+        if(page === 'settings' && items.length > 2) items[2].classList.add('active');
+    }
+    renderCurrentPage();
+}
+
+function formatTime(timeStr) {
+    if(!timeStr) return 'TBD';
+    const [h, m] = timeStr.split(':');
+    if(!h || !m) return timeStr;
+    const hh = parseInt(h);
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh % 12 || 12;
+    return `${h12}:${m} ${ampm}`;
+}
+
+function formatEventDate(rawDate) {
+    if(!rawDate) return 'TBD';
+    const dateStr = String(rawDate).split('T')[0];
+    let d;
+    if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if(parts.length === 3) d = new Date(parts[2], parts[0]-1, parts[1]);
+    } else if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if(parts.length === 3) d = new Date(parts[0], parts[1]-1, parts[2]);
+    }
+    if (d && !isNaN(d.getTime())) return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return dateStr; 
+}
+
+// ============================================================================
+// UI RENDERING
+// ============================================================================
+function renderCurrentPage() {
+    const main = document.getElementById('workerMain');
+    const isAdmin = (APP.currentUser.role === 'president' || APP.currentUser.role === 'manager');
+
+    if (currentAppPage === 'details') {
+        const item = currentDetailType === 'public' ? APP.events.find(e => e.id == currentDetailId) : APP.requests.find(r => r.id == currentDetailId);
+        if(!item) return wNav('events');
+
+        if(!item.assignments) item.assignments = [];
+        APP.users.forEach(u => {
+            if(!item.assignments.find(a => a.staffId == u.id)) {
+                if (currentDetailType === 'public') item.assignments.push({staffId: u.id, role: 'Staff', status: 'accepted', respondedAt: ''});
+                else item.assignments.push({staffId: u.id, role: '', status: 'pending', respondedAt: ''});
+            }
         });
-        const result = await response.json();
-        if(!result.success) throw new Error(result.message || "Unknown error");
 
-        document.getElementById('step2').classList.remove('active');
-        document.getElementById('confirmEmail').textContent = email;
-        document.getElementById('step3').classList.add('active');
-        window.scrollTo(0, 0);
-    } catch(err) {
-        fail("There was an error submitting your request: " + err.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Submit Request';
-    }
-}
+        const title = item.title || item.group;
+        const locOrTopic = item.location || item.topics;
+        const showReschedule = isAdmin && currentDetailType === 'private' && isEventInFuture(item.date, item.time);
 
-/* ---------------- ticket wallet ---------------- */
-function setupGroupingDropdown() {
-    if(ticketDataGlobal.count <= 1) return;
-    const select = document.getElementById('group-select');
-    let html = `<option value="1">1 at a time</option>`;
-    for(let i=2; i<=ticketDataGlobal.count; i++) {
-        if(i <= 5 || i === ticketDataGlobal.count) html += `<option value="${i}">${i} at a time</option>`;
-    }
-    select.innerHTML = html;
-    document.getElementById('grouping-controls').style.display = 'block';
-}
+        let staffHTML = item.assignments.map(a => {
+            const staff = APP.users.find(u => u.id == a.staffId) || {name:'Unknown', role:'Removed'};
+            const isMe = staff.id === APP.currentUser.id;
+            
+            let badgeHTML = `<span class="badge badge-pending">Pending</span>`;
+            if(a.status === 'accepted') badgeHTML = `<span class="badge badge-approved" style="background:#d3f9d8; color:#2b8a3e;">✓ Accepted</span>`;
+            if(a.status === 'declined') badgeHTML = `<span class="badge badge-declined">✗ Declined</span>`;
 
-function renderTicketWallet() {
-    const groupSize = parseInt(document.getElementById('group-select')?.value || 1);
-    const { id, name, title, date, time, count } = ticketDataGlobal;
-    const container = document.getElementById('ticket-carousel');
-    let html = '';
+            let actionsHTML = '';
+            
+            if(isMe) {
+                if (currentDetailType === 'public') {
+                    if (a.status === 'accepted') actionsHTML = `<button class="btn btn-small btn-outline" style="margin-top:10px; width:100%; border-color:var(--danger); color:var(--danger);" onclick="updateRSVP(${item.id}, 'public', ${staff.id}, 'declined')">I Can't Work</button>`;
+                    else if (a.status === 'declined') actionsHTML = `<button class="btn btn-small btn-primary" style="margin-top:10px; width:100%;" onclick="updateRSVP(${item.id}, 'public', ${staff.id}, 'accepted')">Rejoin Shift</button>`;
+                } 
+                else if (currentDetailType === 'private') {
+                    if (a.status === 'pending') {
+                        actionsHTML = `<div style="display:flex; gap:8px; margin-top:10px;"><button class="btn btn-small btn-outline" style="flex:1;" onclick="updateRSVP(${item.id}, 'private', ${staff.id}, 'declined')">Can't Work</button><button class="btn btn-small btn-primary" style="flex:1;" onclick="updateRSVP(${item.id}, 'private', ${staff.id}, 'accepted')">I Can Work</button></div>`;
+                    } else if (a.status === 'accepted') {
+                        actionsHTML = `<div style="margin-top:10px; background:rgba(68,45,125,0.05); padding:10px; border-radius:8px;"><label style="font-size:10px; font-weight:700; color:var(--surface); text-transform:uppercase; display:block; margin-bottom:6px;">What are you presenting?</label><div style="display:flex; gap:8px;"><input type="text" id="topic-${staff.id}" value="${a.role || ''}" placeholder="e.g. Constellations" style="flex:1; padding:8px 10px; border-radius:6px; border:1px solid var(--border-light); font-family:var(--font); font-size:13px; outline:none;"><button class="btn btn-small btn-primary" onclick="saveTopic(${item.id}, 'private', ${staff.id})">Save</button></div><button class="btn btn-small btn-outline" style="margin-top:12px; width:100%; font-size:11px; padding:6px;" onclick="updateRSVP(${item.id}, 'private', ${staff.id}, 'declined')">Cancel RSVP</button></div>`;
+                    } else if (a.status === 'declined') {
+                        actionsHTML = `<button class="btn btn-small btn-outline" style="margin-top:10px; width:100%;" onclick="updateRSVP(${item.id}, 'private', ${staff.id}, 'pending')">Change Mind (Reset)</button>`;
+                    }
+                }
+            }
 
-    const chunks = [];
-    let remaining = count;
-    while(remaining > 0) {
-        let chunk = Math.min(groupSize, remaining);
-        chunks.push(chunk);
-        remaining -= chunk;
-    }
+            return `
+            <div class="staff-item">
+                <div class="staff-avatar">${staff.name.charAt(0)}</div>
+                <div class="staff-info">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <div class="staff-name">${staff.name}</div>
+                            ${a.role ? `<div class="staff-role">Topic/Role: ${a.role}</div>` : ''}
+                        </div>
+                        ${badgeHTML}
+                    </div>
+                    ${a.respondedAt ? `<span class="staff-time">Responded: ${a.respondedAt}</span>` : ''}
+                    ${actionsHTML}
+                </div>
+            </div>`;
+        }).join('');
 
-    slidesCount = chunks.length;
-    currentTicketIndex = 0;
+        main.innerHTML = `
+        <div class="wpage active">
+            <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div class="back-btn" onclick="wNav('events')" style="font-size:24px; cursor:pointer;">←</div>
+                    <h2 style="font-size:18px;">Details</h2>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    ${showReschedule ? `<button class="btn btn-small btn-outline" style="border-color:var(--warning); color:var(--warning);" onclick="rescheduleRequest(${item.id})">Reschedule</button>` : ''}
+                    ${isAdmin ? `<button class="btn btn-small btn-outline" onclick="openEventModal(${item.id}, '${currentDetailType}')">Edit Info</button>` : ''}
+                    ${isAdmin ? `<button class="btn btn-small btn-outline" style="border-color:var(--muted-dark); color:var(--muted-dark);" onclick="archiveEvent(${item.id}, '${currentDetailType}')">📦 Archive</button>` : ''}
+                </div>
+            </div>
 
-    chunks.forEach((chunkSize, index) => {
-        const isGroup = chunkSize > 1;
-        const admitText = isGroup ? `ADMIT ${chunkSize}` : `ADMIT ONE`;
-        const headerColor = isGroup ? `#2ed573` : `#442D7D`;
+            <div class="mobile-card" style="border-top:4px solid var(--accent);">
+                <div class="card-title" style="font-size:22px; margin-bottom:12px;">${title}</div>
+                <div class="card-detail"><span>📅</span> ${formatEventDate(item.date)}</div>
+                <div class="card-detail"><span>🕒</span> ${formatTime(item.time)}</div>
+                <div class="card-detail"><span>📍</span> ${locOrTopic}</div>
+                <div class="card-detail"><span>👥</span> Expected: ${item.spots || item.size || 0}</div>
+                ${currentDetailType === 'public' ? `
+                <div class="card-detail"><span>🎟️</span> Reserved: <strong style="color:var(--accent);">&nbsp;${item.reserved || 0}</strong></div>
+                <div class="card-detail" style="color:var(--success); font-weight:bold;"><span>🎫</span> Checked In: ${item.scanned || 0}</div>
+                <div class="card-detail"><span>🪑</span> Capacity: ${item.max || 'N/A'} · <strong style="color:${((item.max||0)-(item.reserved||0)-(item.scanned||0)) <= 0 ? 'var(--danger)' : 'var(--success)'};">&nbsp;${Math.max(0, (item.max||0)-(item.reserved||0)-(item.scanned||0))} Seats Left</strong></div>` : ''}
+                ${currentDetailType === 'private' ? `<div class="card-detail"><span>👤</span> Contact: ${item.email || 'No Email Provided'}</div>` : ''}
+            </div>
 
-        html += `
-        <div class="ticket-slide ${index === 0 ? 'active' : ''}" id="slide-${index}">
-            <div class="ticket-box">
-                <h2 style="font-family:'Orbitron', monospace; color:${headerColor}; font-size:24px; letter-spacing:2px;">${admitText}</h2>
-                <p style="color:#888; font-size:12px; margin-top:4px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Heitkamp Planetarium</p>
-
-                <div style="height:30px;"></div>
-                <div class="ticket-divider"></div>
-
-                <div class="qr-container" id="qr-code-${index}"></div>
-
-                <h3 style="font-size:22px; font-weight:700; margin-bottom:8px; line-height:1.2;">${title}</h3>
-                <p style="color:#442D7D; font-weight:700; font-size:15px;">${formatEventDate(date)}${time ? ' @ ' + formatTime(time) : ''}</p>
-                <p style="color:#888; font-size:13px; margin-top:20px; background:#f4f4f4; padding:10px; border-radius:8px;">Reserved under: <span style="font-weight:700; color:#111;">${name}</span></p>
+            <h3 style="font-size:16px; margin:24px 0 16px; color:var(--text-dark);">Staff Roster</h3>
+            <div class="staff-list">
+                ${staffHTML}
             </div>
         </div>`;
-    });
-    container.innerHTML = html;
+    }
 
-    chunks.forEach((chunkSize, index) => {
-        const qrText = chunkSize > 1
-            ? `TICKET|${id}|GROUP|${index+1}|${chunkSize}`
-            : `TICKET|${id}|SINGLE|${index+1}`;
-        const host = document.getElementById(`qr-code-${index}`);
-        if (typeof QRCode !== 'undefined') {
-            new QRCode(host, { text: qrText, width: 180, height: 180, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H });
-        } else {
-            host.style.cssText = 'padding:20px;font-family:monospace;font-size:11px;color:#000;word-break:break-all;';
-            host.textContent = qrText;
+    else if(currentAppPage === 'events') {
+        const allShows = [
+            ...APP.events.filter(e => !e.archived).map(e => ({...e, displayType:'public'})),
+            ...APP.requests.filter(r => !r.archived).map(r => ({...r, displayType:'private'}))
+        ].sort((a,b) => new Date(a.date) - new Date(b.date));
+
+        const today = new Date(); today.setHours(0,0,0,0);
+        const isPast = (ev) => {
+            const d = new Date(ev.date + (ev.time ? 'T' + ev.time : 'T23:59:59'));
+            return d < today;
+        };
+        const upcomingShows = allShows.filter(ev => !isPast(ev));
+        const pastShows = allShows.filter(isPast).reverse();
+
+        const renderCard = (ev, past) => {
+            const isPublic = ev.displayType === 'public';
+            const badge = isPublic ? `<span class="badge badge-public">PUBLIC</span>` : `<span class="badge badge-private">PRIVATE</span>`;
+            const title = ev.title || ev.group;
+            const locOrTopic = ev.location || ev.topics;
+            const reserved = ev.reserved || 0;
+            const scanned = ev.scanned || 0;
+            const spotsLeft = (ev.max || 0) - reserved - scanned;
+
+            let capacityHTML = '<div></div>';
+            if (isPublic) {
+                capacityHTML = spotsLeft <= 0
+                    ? `<div style="font-size:11px; font-weight:bold; color:var(--danger);">SOLD OUT · ${reserved} Rsvd · ${scanned} In</div>`
+                    : `<div style="font-size:11px; font-weight:bold; color:var(--success);">🎫 ${spotsLeft} Left · ${reserved} Rsvd · ${scanned} In</div>`;
+            }
+
+            return `
+            <div class="mobile-card clickable" onclick="openDetails(${ev.id}, '${ev.displayType}')" ${past ? 'style="opacity:0.55;"' : ''}>
+                <div class="card-header"><div class="card-title">${title}</div>${badge}</div>
+                <div class="card-detail"><span>📅</span> ${formatEventDate(ev.date)} @ ${formatTime(ev.time)}</div>
+                <div class="card-detail"><span>📍</span> ${locOrTopic}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                    <div style="font-size:11px; color:var(--muted-dark);">Tap to view roster →</div>
+                    ${capacityHTML}
+                </div>
+            </div>`;
+        };
+
+        main.innerHTML = `<div class="wpage active">
+            <div class="page-header" style="margin-bottom:10px;">
+                <h2 style="color:var(--text-dark);">Master Schedule</h2>
+                <button class="btn btn-small btn-primary" style="margin-top:10px;" onclick="openScanner()">📷 Scan QR Tickets</button>
+            </div>
+            ${isAdmin ? `
+            <div style="display:flex; gap:10px; margin-bottom:20px;">
+                <button class="btn btn-small btn-outline" style="flex:1;" onclick="openEventModal(null, 'public')">+ Add Public Show</button>
+                <button class="btn btn-small btn-outline" style="flex:1;" onclick="openEventModal(null, 'private')">+ Add Private Group</button>
+            </div>` : ''}
+
+            ${upcomingShows.length ? upcomingShows.map(ev => renderCard(ev, false)).join('') : '<p style="color:var(--muted-dark);">No upcoming shows.</p>'}
+
+            ${pastShows.length ? `
+            <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin:24px 0 12px;">Past Shows</h3>
+            ${pastShows.slice(0, 10).map(ev => renderCard(ev, true)).join('')}` : ''}
+        </div>`;
+    }
+
+    else if(currentAppPage === 'time') {
+        const adminBtn = isAdmin ? `<button style="background:transparent; border:none; color:var(--accent); text-decoration:underline; font-size:12px;" onclick="document.getElementById('editMaxHoursModal').classList.add('open')">Edit Max</button>` : '';
+        const currentSession = isClockedIn ? ((new Date() - clockInTime) / 60000).toFixed(0) : 0;
+
+        const myLogs = (APP.timeLogs || []).filter(l => l.staffId === APP.currentUser.id).reverse();
+        const myTotalHours = myLogs.reduce((sum, l) => sum + (Number(l.minutes)/60), 0);
+
+        const historyHTML = myLogs.slice(0, 5).map(l => `
+            <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border-light); font-size:14px;">
+                <span style="color:var(--text-dark); font-weight:600;">📅 ${l.date}</span>
+                <span style="color:var(--success); font-weight:700;">+${(l.minutes/60).toFixed(2)} hrs</span>
+            </div>
+        `).join('') || '<p style="font-size:12px; color:var(--muted-dark); padding-top:10px;">No recent shifts logged.</p>';
+
+        let adminRosterHTML = '';
+        if (isAdmin) {
+            const rosterStats = APP.users.map(u => {
+                const uLogs = (APP.timeLogs || []).filter(l => l.staffId === u.id);
+                const uHrs = uLogs.reduce((sum, l) => sum + (Number(l.minutes)/60), 0);
+                return `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-light);">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <div class="staff-avatar" style="width:28px; height:28px; font-size:12px;">${u.name.charAt(0)}</div>
+                        <span style="color:var(--text-dark); font-size:14px; font-weight:600;">${u.name}</span>
+                    </div>
+                    <span style="color:var(--surface); font-weight:700; font-size:14px;">${uHrs.toFixed(2)} hrs</span>
+                </div>`;
+            }).join('');
+            
+            adminRosterHTML = `
+            <div class="mobile-card" style="margin-top:20px;">
+                <strong style="color:var(--text-dark); margin-bottom:8px; display:block;">Admin: Staff Hour Roster</strong>
+                ${rosterStats}
+            </div>`;
         }
-    });
 
-    updateNavUI();
-}
+        main.innerHTML = `<div class="wpage active">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="color:var(--text-dark);">Timeclock</h2>
+                <button class="btn btn-small btn-outline" style="border-width:1px;" onclick="openManualTimeModal()">+ Manual Entry</button>
+            </div>
+            
+            <div class="mobile-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong style="color:var(--text-dark);">Department Total Hours</strong>
+                    ${adminBtn}
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" style="width: ${Math.min((APP.time.total / APP.time.max) * 100, 100)}%"></div>
+                </div>
+                <p style="font-size:12px; color:var(--muted-dark); text-align:right; margin-top:4px;">${APP.time.total.toFixed(1)} / ${APP.time.max} hrs</p>
+            </div>
 
-function updateNavUI() {
-    const dotsContainer = document.getElementById('carousel-dots');
-    const btnL = document.getElementById('nav-left');
-    const btnR = document.getElementById('nav-right');
-    const hint = document.getElementById('swipe-hint');
+            <div class="mobile-card">
+                <strong style="color:var(--text-dark);">Your Total Hours</strong>
+                <div class="progress-container">
+                    <div class="progress-bar personal" style="width: ${Math.min((myTotalHours/40)*100, 100)}%"></div>
+                </div>
+                <p style="font-size:12px; color:var(--muted-dark); text-align:right; margin-top:4px;">${myTotalHours.toFixed(2)} hrs</p>
+                
+                <div style="margin-top:30px; text-align:center;">
+                    <p style="font-size:12px; color:var(--muted-dark); text-transform:uppercase;">Current Session</p>
+                    <p style="font-size:36px; font-weight:700; margin-bottom:16px; color:var(--surface);" id="sessionTimeDisplay">${currentSession} mins</p>
+                    ${isClockedIn 
+                        ? `<button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); padding:16px; font-size:16px;" onclick="toggleClock()">Stop Work</button>`
+                        : `<button class="btn btn-primary" style="background:var(--success); padding:16px; font-size:16px;" onclick="toggleClock()">Clock In</button>`
+                    }
+                </div>
+            </div>
 
-    if (slidesCount > 1) {
-        btnL.style.visibility = 'visible'; btnR.style.visibility = 'visible';
-        dotsContainer.style.display = 'flex';
-        hint.style.display = 'block';
+            <div class="mobile-card">
+                <strong style="color:var(--text-dark); margin-bottom:8px; display:block;">Your Recent Shifts</strong>
+                ${historyHTML}
+            </div>
 
-        let dotsHTML = '';
-        for(let i=0; i<slidesCount; i++) dotsHTML += `<div class="dot ${i === 0 ? 'active' : ''}" id="dot-${i}"></div>`;
-        dotsContainer.innerHTML = dotsHTML;
-    } else {
-        btnL.style.visibility = 'hidden'; btnR.style.visibility = 'hidden';
-        dotsContainer.style.display = 'none';
-        hint.style.display = 'none';
+            ${adminRosterHTML}
+        </div>`;
+    }
+
+    else if(currentAppPage === 'settings') {
+        const adminUI = isAdmin ? `
+            <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-top:24px; margin-bottom:12px;">Admin Controls</h3>
+            <div class="mobile-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border-light); padding-bottom:16px;">
+                    <div>
+                        <h3 style="font-size:14px; color:var(--text-dark);">Registration Key</h3>
+                        <p style="font-size:12px; color:var(--accent); font-family:var(--display); margin-top:2px; font-weight:bold;">${APP.settings.inviteKey}</p>
+                    </div>
+                    <button class="btn btn-outline btn-small" style="width:auto;" onclick="openKeyModal()">Edit Key</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border-light); padding-bottom:16px;">
+                    <span style="font-weight:600; font-size:14px; color:var(--text-dark);">Staff Communications</span>
+                    <button class="btn btn-outline btn-small" style="width:auto;" onclick="emailAllStaff()">Email All Staff</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:600; font-size:14px; color:var(--text-dark);">Staff Positions</span>
+                    <button class="btn btn-outline btn-small" style="width:auto;" onclick="openRoleModal()">Manage Roles</button>
+                </div>
+            </div>` : '';
+
+        const isDark = (APP.currentUser.darkMode === true || APP.currentUser.darkMode === "TRUE");
+
+        const archivedShows = [...APP.events.map(e => ({...e, _type:'public'})), ...APP.requests.map(r => ({...r, _type:'private'}))]
+            .filter(e => e.archived)
+            .sort((a,b) => new Date(b.date) - new Date(a.date));
+
+        const archivedHTML = archivedShows.length ? archivedShows.map(ev => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-light);">
+                <div>
+                    <div style="font-weight:700; font-size:14px; color:var(--text-dark);">${ev.title || ev.group}</div>
+                    <div style="font-size:11px; color:var(--muted-dark); margin-top:2px;">${formatEventDate(ev.date)} · ${ev._type === 'public' ? 'PUBLIC' : 'PRIVATE'}${ev._type === 'public' ? ` · ${ev.reserved||0} Rsvd · ${ev.scanned||0} In` : ''}</div>
+                </div>
+                ${isAdmin ? `<button class="btn btn-outline btn-small" style="width:auto;" onclick="unarchiveEvent(${ev.id}, '${ev._type}')">Restore</button>` : ''}
+            </div>`).join('') : '<p style="font-size:12px; color:var(--muted-dark); padding:10px 0;">No archived shows.</p>';
+
+        main.innerHTML = `<div class="wpage active">
+            <h2 style="color:var(--text-dark); margin-bottom:24px;">Settings</h2>
+
+            <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">My Account</h3>
+            <div class="mobile-card" style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div class="staff-avatar" style="background:var(--surface);">${APP.currentUser.name.charAt(0)}</div>
+                    <div>
+                        <h3 style="font-size:15px; color:var(--text-dark);">${APP.currentUser.name}</h3>
+                        <p style="font-size:11px; color:var(--muted-dark); text-transform:uppercase; margin-top:2px;">${APP.currentUser.role}</p>
+                    </div>
+                </div>
+                <button class="btn btn-outline btn-small" style="width:auto;" onclick="openPasswordModal()">Change Password</button>
+            </div>
+
+            <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-top:24px; margin-bottom:12px;">Appearance</h3>
+            <div class="mobile-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:600; font-size:14px; color:var(--text-dark);">Dark Mode</span>
+                    <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" ${isDark ? 'checked' : ''} onchange="toggleDarkMode(this.checked)">
+                </div>
+            </div>
+
+            <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-top:24px; margin-bottom:12px;">App Preferences</h3>
+            <div class="mobile-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border-light); padding-bottom:16px;">
+                    <span style="font-weight:600; font-size:14px; color:var(--text-dark);">Enable Time Notifications</span>
+                    <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" ${APP.settings.notifsEnabled ? 'checked' : ''} onchange="toggleSetting('notifsEnabled', this.checked)">
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:600; font-size:14px; color:var(--text-dark);">Pause During Shows</span>
+                    <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" ${APP.settings.pauseShows ? 'checked' : ''} onchange="toggleSetting('pauseShows', this.checked)">
+                </div>
+            </div>
+
+            ${adminUI}
+
+            <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-top:24px; margin-bottom:12px;">📦 Archived Shows</h3>
+            <div class="mobile-card">
+                ${archivedHTML}
+            </div>
+
+            ${LOGIN_ENABLED ? `
+            <div style="margin-top:40px;">
+                <button class="btn btn-primary" style="background:var(--danger); color:#fff; font-size:16px; padding:16px;" onclick="doLogout()">🔒 Log Out</button>
+            </div>` : ''}
+        </div>`;
     }
 }
 
-function changeTicket(direction) {
-    if(slidesCount <= 1) return;
-    document.getElementById(`slide-${currentTicketIndex}`).classList.remove('active');
-    document.getElementById(`dot-${currentTicketIndex}`).classList.remove('active');
-    currentTicketIndex = (currentTicketIndex + direction + slidesCount) % slidesCount;
-    document.getElementById(`slide-${currentTicketIndex}`).classList.add('active');
-    document.getElementById(`dot-${currentTicketIndex}`).classList.add('active');
+// ============================================================================
+// DATA MUTATIONS (CREATE/EDIT/DELETE/RSVP)
+// ============================================================================
+function openDetails(id, type) { currentAppPage = 'details'; currentDetailId = id; currentDetailType = type; renderCurrentPage(); }
+
+function openEventModal(id, type) {
+    document.getElementById('evId').value = id || '';
+    document.getElementById('evType').value = type;
+    const deleteBtn = document.getElementById('btnDeleteEvent');
+    
+    // 🚨 Show Email Input ONLY for Private Events
+    if (type === 'private') {
+        document.getElementById('evContactGroup').style.display = 'block';
+    } else {
+        document.getElementById('evContactGroup').style.display = 'none';
+    }
+    
+    if(id) {
+        document.getElementById('eventModalTitle').textContent = 'Edit Show';
+        deleteBtn.style.display = 'block'; 
+        const arr = type === 'public' ? APP.events : APP.requests;
+        const item = arr.find(i => i.id == id);
+        document.getElementById('evTitle').value = item.title || item.group || '';
+        document.getElementById('evDate').value = item.date || '';
+        document.getElementById('evTime').value = item.time || '';
+        document.getElementById('evLoc').value = item.location || item.topics || '';
+        document.getElementById('evSpots').value = item.spots || item.size || 0;
+        document.getElementById('evMax').value = item.max || 100;
+        document.getElementById('evContact').value = item.contact || '';
+    } else {
+        document.getElementById('eventModalTitle').textContent = 'Create New Show';
+        deleteBtn.style.display = 'none'; 
+        document.getElementById('evTitle').value = '';
+        document.getElementById('evDate').value = '';
+        document.getElementById('evTime').value = '';
+        document.getElementById('evLoc').value = '';
+        document.getElementById('evSpots').value = '';
+        document.getElementById('evContact').value = '';
+    }
+    document.getElementById('eventModal').classList.add('open');
 }
 
-function setupSwipeListeners() {
-    const ticketView = document.getElementById('ticket-view');
-    ticketView.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; }, {passive: true});
-    ticketView.addEventListener('touchend', e => {
-        touchendX = e.changedTouches[0].screenX;
-        if(slidesCount > 1) {
-            if (touchendX < touchstartX - 50) changeTicket(1);
-            if (touchendX > touchstartX + 50) changeTicket(-1);
+async function saveEvent() {
+    const id = document.getElementById('evId').value;
+    const type = document.getElementById('evType').value;
+    const title = sanitize(document.getElementById('evTitle').value.trim());
+    const date = document.getElementById('evDate').value;
+    const time = document.getElementById('evTime').value;
+    const loc = sanitize(document.getElementById('evLoc').value.trim());
+    const spots = parseInt(document.getElementById('evSpots').value) || 0;
+    const max = parseInt(document.getElementById('evMax').value) || 100;
+    const contact = sanitize(document.getElementById('evContact').value.trim());
+
+    if(!title) return showToast("Title is required", "error");
+    if(!date || !time) return showToast("Date and time are required", "error");
+    if(!validateFutureDate(date)) return showToast("Event date must be today or in the future", "error");
+
+    const arr = type === 'public' ? APP.events : APP.requests;
+
+    if(id) {
+        const item = arr.find(i => i.id == id);
+        if(type === 'public') { item.title = title; item.location = loc; item.spots = spots; item.max = max; } 
+        else { item.group = title; item.topics = loc; item.size = spots; item.contact = contact || 'No Email Provided'; }
+        item.date = date; item.time = time;
+       } else {
+        const newId = Math.floor(Math.random() * 100000);
+        const defaultAssignments = APP.users.map(u => ({ staffId: u.id, role: type === 'public' ? 'Staff' : '', status: type === 'public' ? 'accepted' : 'pending', respondedAt: '' }));
+
+        if(type === 'public') arr.push({id: newId, title, date, time, location:loc, max, spots, reserved:0, scanned:0, archived:false, assignments: defaultAssignments});
+        else arr.push({id: newId, group:title, date, time, topics:loc, size:spots, contact: contact || 'No Email Provided', status:'approved', reserved:0, scanned:0, archived:false, assignments: defaultAssignments});
+    }
+    closeModal('eventModal'); renderCurrentPage(); 
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+async function deleteEvent() {
+    const id = document.getElementById('evId').value;
+    const type = document.getElementById('evType').value;
+    if(!id) return;
+    if(!confirm("Are you sure you want to completely delete this show? This cannot be undone.")) return;
+    if(type === 'public') { APP.events = APP.events.filter(e => e.id != id); } else { APP.requests = APP.requests.filter(r => r.id != id); }
+    closeModal('eventModal'); showToast("Show deleted successfully.", "success"); wNav('events'); 
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+// ============================================================================
+// ARCHIVE / RESTORE
+// ============================================================================
+async function archiveEvent(id, type) {
+    if(!confirm("Archive this show? It will be hidden from the schedule but restorable in Settings.")) return;
+    const arr = type === 'public' ? APP.events : APP.requests;
+    const ev = arr.find(e => e.id == id);
+    if(!ev) return;
+    ev.archived = true;
+    showToast("Show archived.", "success");
+    wNav('events');
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+async function unarchiveEvent(id, type) {
+    const arr = type === 'public' ? APP.events : APP.requests;
+    const ev = arr.find(e => e.id == id);
+    if(!ev) return;
+    ev.archived = false;
+    showToast("Show restored to schedule.", "success");
+    renderCurrentPage();
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+// 🚨 NEW: Native Email App Integration for Rescheduling
+function rescheduleRequest(id) {
+    const req = APP.requests.find(r => r.id == id);
+    if(!req) return;
+    
+    const clientEmail = req.email;
+    if (!clientEmail || !validateEmail(clientEmail)) {
+        return showToast("No valid email address was provided for this group.", "error");
+    }
+
+    const subject = encodeURIComponent(`Rescheduling Planetarium Visit: ${req.group}`);
+    const body = encodeURIComponent(`Hello,\n\nWe need to reschedule your upcoming visit to the Planetarium on ${formatEventDate(req.date)}.\n\nPlease let us know what other dates might work for you.\n\nThank you,\nPlanetarium Staff`);
+    
+    window.location.href = `mailto:${clientEmail}?subject=${subject}&body=${body}`;
+    showToast("Opening your native email app...", "success");
+}
+// 🚨 NEW: Native Email App Integration for Staff Broadcasts
+function emailAllStaff() {
+    const emails = APP.users
+        .map(u => u.username)
+        .filter(email => email && email.includes('@'))
+        .join(',');
+    
+    if (!emails) return showToast("No staff members have valid email addresses.", "error");
+    
+    const subject = encodeURIComponent("Planetarium Staff Update");
+    
+    // Uses BCC so staff don't see everyone's email addresses
+    window.location.href = `mailto:?bcc=${emails}&subject=${subject}`;
+    showToast("Opening your native email app...", "success");
+}
+
+async function updateRSVP(evId, evType, staffId, status) {
+    const arr = evType === 'public' ? APP.events : APP.requests;
+    const item = arr.find(i => i.id == evId);
+    const assign = item.assignments.find(a => a.staffId == staffId);
+    
+    if(assign) {
+        assign.status = status;
+        assign.respondedAt = new Date().toLocaleString('en-US', { month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit' });
+        renderCurrentPage(); 
+        document.getElementById('cloud-syncing').classList.add('active');
+        await pushCloudData();
+        document.getElementById('cloud-syncing').classList.remove('active');
+    }
+}
+
+async function saveTopic(evId, evType, staffId) {
+    const arr = evType === 'public' ? APP.events : APP.requests;
+    const item = arr.find(i => i.id == evId);
+    const assign = item.assignments.find(a => a.staffId == staffId);
+    const topicInput = document.getElementById(`topic-${staffId}`).value;
+    
+    if(assign) {
+        assign.role = topicInput;
+        showToast("Topic saved!", "success");
+        renderCurrentPage(); 
+        document.getElementById('cloud-syncing').classList.add('active');
+        await pushCloudData();
+        document.getElementById('cloud-syncing').classList.remove('active');
+    }
+}
+
+// ============================================================================
+// TIMECLOCK LOGIC
+// ============================================================================
+async function toggleClock() {
+    if(isClockedIn) {
+        const minsWorked = (new Date() - clockInTime) / 60000;
+        
+        APP.time.total += (minsWorked / 60);
+        APP.timeLogs = APP.timeLogs || [];
+        APP.timeLogs.push({
+            id: Date.now(),
+            staffId: APP.currentUser.id,
+            date: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric'}),
+            minutes: minsWorked
+        });
+        
+        isClockedIn = false;
+        clockInTime = null;
+        showToast(`Clocked out. Added ${minsWorked.toFixed(0)} mins.`, 'success');
+    } else {
+        isClockedIn = true;
+        clockInTime = new Date();
+        showToast("Clocked In!", "success");
+    }
+    
+    renderCurrentPage();
+    await pushCloudData();
+}
+
+function timeclockLoop() {
+    if(isClockedIn) {
+        const minsWorked = ((new Date() - clockInTime) / 60000).toFixed(0);
+        const display = document.getElementById('sessionTimeDisplay');
+        if(display) display.textContent = `${minsWorked} mins`;
+
+        if(minsWorked > 0 && minsWorked % 15 === 0) {
+            if(APP.settings.notifsEnabled && !APP.settings.pauseShows) {
+                if ("Notification" in window && Notification.permission === "granted") new Notification("Planetarium Staff", {body: `You've been clocked in for ${minsWorked} minutes.`});
+                else showToast(`Reminder: Working for ${minsWorked} mins`, 'success');
+            }
         }
-    }, {passive: true});
+    }
+}
+if ("Notification" in window && Notification.permission !== "denied") { Notification.requestPermission(); }
+
+function saveMaxHours() {
+    const input = document.getElementById('maxHoursInput').value;
+    if(input) { APP.time.max = parseInt(input); pushCloudData(); }
+    closeModal('editMaxHoursModal'); wNav('time');
 }
 
-/* ---------------- boot ---------------- */
-window.onload = async () => {
-    init3D();
+function openManualTimeModal() {
+    document.getElementById('manualDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('manualHours').value = '';
+    document.getElementById('manualTimeModal').classList.add('open');
+}
 
-    const urlParams = new URLSearchParams(window.location.search);
-    ticketDataGlobal = {
-        id: urlParams.get('ticket'),
-        name: urlParams.get('name') || "Guest",
-        title: urlParams.get('title') || "Planetarium Show",
-        date: urlParams.get('date') || "TBD",
-        time: urlParams.get('time') || "",
-        count: parseInt(urlParams.get('count')) || 1
-    };
+async function saveManualTime() {
+    const dateRaw = document.getElementById('manualDate').value;
+    const hours = parseFloat(document.getElementById('manualHours').value);
+    
+    if(!dateRaw || isNaN(hours) || hours <= 0) return showToast("Enter a valid date and hours.", "error");
 
-    if (ticketDataGlobal.id) {
-        // Ticket link from email — skip the splash, go straight to the wallet.
-        dismissSplash();
-        setupGroupingDropdown();
-        renderTicketWallet();
-        setupSwipeListeners();
-        document.getElementById('loading').classList.remove('active');
-        goView('ticket-view');
+    let tempDate = new Date(dateRaw);
+    tempDate.setMinutes(tempDate.getMinutes() + tempDate.getTimezoneOffset());
+    const formattedDate = tempDate.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+    
+    const mins = hours * 60;
+
+    APP.time.total += hours;
+    APP.timeLogs = APP.timeLogs || [];
+    APP.timeLogs.push({
+        id: Date.now(),
+        staffId: APP.currentUser.id,
+        date: formattedDate,
+        minutes: mins
+    });
+
+    closeModal('manualTimeModal');
+    showToast(`Successfully logged ${hours} hours!`, "success");
+    renderCurrentPage();
+    
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+// ============================================================================
+// SETTINGS & ROLE LOGIC
+// ============================================================================
+function openPasswordModal() { 
+    document.getElementById('newPasswordInput').value = ''; 
+    document.getElementById('passwordModal').classList.add('open'); 
+}
+
+async function saveNewPassword() {
+    const newPass = document.getElementById('newPasswordInput').value;
+    if(newPass.length < 6) return showToast("Password must be at least 6 characters", "error");
+
+    APP.currentUser.password = newPass;
+    const sessionUser = { ...APP.currentUser };
+    delete sessionUser.password;
+    localStorage.setItem('planetarium_user', JSON.stringify(sessionUser));
+    
+    const userInCloud = APP.users.find(u => u.id === APP.currentUser.id);
+    if(userInCloud) userInCloud.password = newPass;
+    
+    closeModal('passwordModal');
+    showToast("Password Updated!", "success");
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+function openKeyModal() { document.getElementById('newKeyInput').value = APP.settings.inviteKey; document.getElementById('keyModal').classList.add('open'); }
+
+async function saveNewKey() {
+    const newKey = document.getElementById('newKeyInput').value;
+    if(newKey.trim().length < 3) return showToast("Key must be at least 3 characters", "error");
+    
+    APP.settings.inviteKey = newKey.trim();
+    closeModal('keyModal');
+    showToast("Registration Key Updated!", "success");
+    renderCurrentPage();
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+async function toggleSetting(key, value) {
+    APP.settings[key] = value;
+    if (key === 'notifsEnabled' && value === true) {
+        if ("Notification" in window && Notification.permission !== "granted") Notification.requestPermission();
+    }
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+function openRoleModal() {
+    const list = document.getElementById('roleList');
+    
+    list.innerHTML = APP.users.map(u => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--bg-main); border-radius:12px; border:1px solid var(--border-light);">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="staff-avatar" style="width:28px; height:28px; font-size:12px;">${u.name.charAt(0)}</div>
+                <span style="color:var(--text-dark); font-size:14px; font-weight:600;">${u.name}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px;">
+                <select id="role-${u.id}" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border-light); background:var(--card-bg); color:var(--text-dark); font-family:var(--font); outline:none; font-size:14px; font-weight:500;">
+                    <option value="staff" ${u.role === 'staff' ? 'selected' : ''}>Staff</option>
+                    <option value="manager" ${u.role === 'manager' ? 'selected' : ''}>Manager</option>
+                    <option value="president" ${u.role === 'president' ? 'selected' : ''}>President</option>
+                </select>
+                <button style="background:var(--danger); color:white; border:none; border-radius:6px; width:28px; height:28px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" onclick="deleteUser(${u.id})" title="Remove Staff">✖</button>
+            </div>
+        </div>
+    `).join('');
+    
+    document.getElementById('roleModal').classList.add('open');
+}
+
+async function saveRoles() {
+    let hasPresident = false;
+    APP.users.forEach(u => {
+        const sel = document.getElementById(`role-${u.id}`);
+        if(sel) { if(sel.value === 'president') hasPresident = true; }
+    });
+
+    if(!hasPresident) { return showToast("Safety Check: You must leave at least one President!", "error"); }
+
+    APP.users.forEach(u => {
+        const sel = document.getElementById(`role-${u.id}`);
+        if(sel) u.role = sel.value;
+    });
+
+    const me = APP.users.find(u => u.id === APP.currentUser.id);
+    if(me) {
+        APP.currentUser.role = me.role;
+        const sessionUser = { ...APP.currentUser };
+        delete sessionUser.password;
+        localStorage.setItem('planetarium_user', JSON.stringify(sessionUser));
+    }
+
+    closeModal('roleModal');
+    showToast("Staff positions updated!", "success");
+    renderCurrentPage();
+
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+async function deleteUser(userId) {
+    if (userId === APP.currentUser.id) return showToast("Safety Check: You cannot remove yourself.", "error");
+    
+    const userToRemove = APP.users.find(u => u.id === userId);
+    if (!userToRemove) return;
+    
+    if (!confirm(`Are you sure you want to completely remove ${userToRemove.name} from the system?`)) return;
+    
+    if (userToRemove.role === 'president') {
+        const remainingPresidents = APP.users.filter(u => u.role === 'president' && u.id !== userId);
+        if (remainingPresidents.length === 0) return showToast("Safety Check: You cannot remove the only President!", "error");
+    }
+    
+    APP.users = APP.users.filter(u => u.id !== userId);
+    
+    showToast(`${userToRemove.name} was removed.`, "success");
+    openRoleModal(); 
+    
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+// ============================================================================
+// QR SCANNER LOGIC
+// ============================================================================
+function openScanner() {
+    document.getElementById('qrModal').classList.add('active');
+    html5QrcodeScanner = new Html5Qrcode("reader");
+    html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, onScanSuccess)
+    .catch(err => { alert("Camera Error: " + err); closeScanner(); });
+}
+
+function onScanSuccess(decodedText) {
+    const data = decodedText.split('|');
+
+    // Supported formats:
+    //   PLANET|id|count                 (legacy)
+    //   TICKET|id|SINGLE|i              (box office single)
+    //   TICKET|id|GROUP|i|n             (box office group, unique per ticket)
+    //   TICKET|id|GROUP|n               (older box office group)
+    let evId = null, scanCount = 1;
+
+    if (data[0] === 'PLANET') {
+        evId = data[1];
+        scanCount = parseInt(data[2]) || 1;
+    } else if (data[0] === 'TICKET' && data[1]) {
+        evId = data[1];
+        if (data[2] === 'GROUP') scanCount = parseInt(data.length >= 5 ? data[4] : data[3]) || 1;
+        else scanCount = 1;
+    } else {
+        showToast("❌ Invalid Planetarium Ticket format.", "error");
         return;
     }
 
-    document.getElementById('loading').classList.remove('active');
-    goView('front');
-    fetchShows();
-    setInterval(fetchShows, REFRESH_MS);
+    // 1. THE LOCAL LOCK: keyed by the FULL QR text so each group ticket
+    //    of the same show scans independently.
+    const alreadyScanned = getScannedTickets();
+    if (alreadyScanned.includes(decodedText)) {
+        if(navigator.vibrate) navigator.vibrate([250, 100, 250]);
+        showToast(`❌ TICKET REJECTED: this exact ticket was already scanned!`, 'error');
+        return;
+    }
 
-    // deep link: ?view=booking opens the private form directly
-    if (urlParams.get('view') === 'booking') goView('booking');
-    if (urlParams.get('view') === 'shows') goView('storefront');
+    // 2. Validate against the downloaded database
+    let type = 'public';
+    let ev = APP.events.find(e => e.id == evId);
 
-    // Set minimum private-booking date to one week out
-    const minDate = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
-    document.getElementById('bookDate').setAttribute('min', minDate);
-};
+    if(!ev) {
+        ev = APP.requests.find(r => r.id == evId);
+        type = 'private';
+    }
+
+    if (ev) {
+        lockTicket(decodedText);
+        ev.scanned = (ev.scanned || 0) + scanCount;
+
+        if(navigator.vibrate) navigator.vibrate([80]);
+        showToast(`✅ Admitted ${scanCount}! Ticket locked.`, 'success');
+
+        pushCloudData().then(() => {
+            openDetails(ev.id, type);
+        });
+
+    } else {
+        showToast(`❌ Invalid Ticket: ID ${evId} not found.`, 'error');
+    }
+}
+
+// Looks inside the device's memory for already scanned tickets
+function getScannedTickets() {
+    const stored = localStorage.getItem('planetarium_scanned_tickets');
+    return stored ? JSON.parse(stored) : [];
+}
+
+// Saves a new ticket to the device's memory so it can't be used again
+function lockTicket(ticketId) {
+    const scanned = getScannedTickets();
+    if (!scanned.includes(ticketId)) {
+        scanned.push(ticketId);
+        localStorage.setItem('planetarium_scanned_tickets', JSON.stringify(scanned));
+    }
+}
+ function closeScanner() {
+    if(html5QrcodeScanner) html5QrcodeScanner.stop().catch(e => console.error(e));
+    document.getElementById('qrModal').classList.remove('active');
+}
+  
+// MODAL UTILS
+// ============================================================================
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function showToast(msg, type='success'){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show';
+    if (type === 'error') { t.classList.add('error'); }
+    else { t.classList.remove('error'); }
+    setTimeout(() => t.classList.remove('show'), 3000);
+}
+document.querySelectorAll('.modal-bg').forEach(bg => { bg.addEventListener('click', (e) => { if(e.target === bg) bg.classList.remove('open'); });});
+
+window.onload = () => { init3D(); };
 </script>
 </body>
 </html>
