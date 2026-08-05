@@ -3,132 +3,255 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Planetarium Box Office</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;900&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+<title>Heitkamp Planetarium — Box Office</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;900&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
     * { margin:0; padding:0; box-sizing:border-box; font-family:'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
     body { background:#0a0514; color:#fff; -webkit-font-smoothing: antialiased; min-height: 100vh; display:flex; flex-direction:column; overflow-x: hidden; }
-    
-    /* Starry Background CSS */
+
+    /* Starry Background */
     .bg-stars { position:fixed; inset:0; z-index:-1; background:radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%); overflow:hidden; }
     .star { position:absolute; background:#fff; border-radius:50%; animation:twinkle infinite alternate; }
     @keyframes twinkle { 0% {opacity:0.3;} 100% {opacity:1; transform:scale(1.2);} }
 
-    header { padding:30px 20px; text-align:center; background:rgba(10, 5, 20, 0.8); backdrop-filter:blur(10px); border-bottom:1px solid rgba(255,255,255,0.05); position:sticky; top:0; z-index:50;}
-    h1 { font-family:'Orbitron', monospace; font-size:24px; color:#D1B888; letter-spacing:2px; }
-    header p { color:#a996cc; font-size:14px; margin-top:5px; }
+    /* ===== 3D ENTRY SPLASH (identical to Staff App) ===== */
+    #solar { position:fixed; inset:0; background:#05020a; z-index:100; transition:opacity 0.4s ease; }
+    #solar.hidden { opacity:0; pointer-events:none; }
+    #solar.gone { display:none; }
+    #solar-ui { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:80px; transition:opacity 0.4s ease; cursor:pointer; }
+    .holo-text { font-family:'Orbitron', monospace; color:#ffffff; text-align:center; letter-spacing:2px; padding:0 20px; pointer-events:none; }
+    .holo-text h1 { font-size:clamp(18px, 6vw, 28px); text-shadow: 0 0 15px rgba(209, 184, 136, 0.5); margin-bottom:8px; color:#D1B888; }
+    #tap-text { font-size:11px; color:#ffffff; animation: pulse 2s infinite; letter-spacing: 4px; font-weight:700; transition:color 0.3s ease; }
+    @keyframes pulse { 0%, 100% {opacity:0.5;} 50% {opacity:1;} }
+    @keyframes pulse-fast { 0%, 100% {opacity:0.6;} 50% {opacity:1;} }
+
+    header { padding:24px 20px; text-align:center; background:rgba(10, 5, 20, 0.8); backdrop-filter:blur(10px); border-bottom:1px solid rgba(255,255,255,0.05); position:sticky; top:0; z-index:50; cursor:pointer;}
+    header h1 { font-family:'Orbitron', monospace; font-size:22px; color:#D1B888; letter-spacing:2px; }
+    header p { color:#a996cc; font-size:13px; margin-top:5px; }
 
     .container { max-width:600px; margin:0 auto; padding:20px; flex:1; width:100%; }
-    
+
     .view { display:none; animation:fadeIn 0.4s ease; }
     .view.active { display:block; }
     @keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+
+    /* ===== FRONT PAGE DOORS ===== */
+    .door {
+        display:flex; align-items:center; gap:18px; text-align:left; width:100%;
+        background:rgba(43, 29, 82, 0.6); border:1px solid rgba(209, 184, 136, 0.25);
+        border-radius:20px; padding:24px 22px; margin-bottom:16px; cursor:pointer;
+        backdrop-filter:blur(10px); transition:transform 0.15s, border-color 0.2s, background 0.2s;
+        color:#fff; font-family:'Outfit', sans-serif;
+    }
+    .door:hover { border-color:#D1B888; background:rgba(43, 29, 82, 0.85); }
+    .door:active { transform:scale(0.98); }
+    .door .door-icon { font-size:34px; flex-shrink:0; }
+    .door h2 { font-family:'Orbitron', monospace; font-size:16px; letter-spacing:1.5px; color:#D1B888; margin-bottom:5px; }
+    .door p { color:#b0a3c9; font-size:13px; line-height:1.5; }
+    .front-tag { text-align:center; color:#a996cc; font-size:13px; margin:26px 0 18px; letter-spacing:1px; }
 
     /* Event Cards */
     .show-card { background:rgba(43, 29, 82, 0.6); border:1px solid rgba(209, 184, 136, 0.2); border-radius:16px; padding:20px; margin-bottom:16px; backdrop-filter:blur(10px); transition:transform 0.2s; position:relative; overflow:hidden;}
     .show-card:active { transform:scale(0.98); }
     .show-title { font-size:20px; font-weight:700; color:#fff; margin-bottom:8px; padding-right:60px;}
     .show-details { color:#b0a3c9; font-size:14px; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
-    
+
     .capacity-badge { position:absolute; top:20px; right:20px; background:rgba(209, 184, 136, 0.1); color:#D1B888; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:700; border:1px solid rgba(209, 184, 136, 0.3);}
     .capacity-badge.sold-out { background:rgba(255, 71, 87, 0.1); color:#ff4757; border-color:rgba(255, 71, 87, 0.3);}
 
-    .btn { display:block; width:100%; padding:14px; margin-top:16px; background:#D1B888; color:#1c1336; text-align:center; border:none; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; text-decoration:none; transition:transform 0.1s; }
+    .btn { display:block; width:100%; padding:14px; margin-top:16px; background:#D1B888; color:#1c1336; text-align:center; border:none; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; text-decoration:none; transition:transform 0.1s; font-family:'Outfit', sans-serif;}
     .btn:active { transform:scale(0.98); }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
     .btn-outline { background:transparent; border:2px solid #D1B888; color:#D1B888; }
-    
-    /* Booking Form Modal */
+    .btn-ghost { background:transparent; border:1px solid rgba(255,255,255,0.2); color:#a996cc; }
+    .btn-small { padding:10px 16px; font-size:14px; }
+
+    .back-link { background:none; border:none; color:#a996cc; font-size:14px; cursor:pointer; padding:6px 0; margin-bottom:14px; font-family:'Outfit', sans-serif; display:inline-flex; align-items:center; gap:6px;}
+    .back-link:hover { color:#D1B888; }
+
+    /* Booking Modal */
     .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); display:flex; align-items:flex-end; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.3s; z-index:100; }
     .modal-bg.open { opacity:1; pointer-events:all; }
-    .modal { background:#1e1e24; width:100%; max-width:600px; border-radius:24px 24px 0 0; padding:30px 20px; transform:translateY(100%); transition:transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .modal { background:#1e1e24; width:100%; max-width:600px; border-radius:24px 24px 0 0; padding:30px 20px; transform:translateY(100%); transition:transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); max-height:88vh; overflow-y:auto;}
     .modal-bg.open .modal { transform:translateY(0); }
-    
+
     .form-group { margin-bottom:16px; }
     .form-group label { display:block; font-size:12px; color:#a996cc; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px; }
-    .form-group input { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:14px; border-radius:10px; font-size:16px; outline:none; }
-    .form-group input:focus { border-color:#D1B888; }
-    
-    /* MULTI-TICKET CAROUSEL CSS */
-    .ticket-slide { display: none; animation: slideIn 0.3s ease; width:100%; }
-    .ticket-slide.active { display: block; }
-    @keyframes slideIn { from {opacity:0; transform:scale(0.95);} to {opacity:1; transform:scale(1);} }
+    .form-group input, .form-group textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:14px; border-radius:10px; font-size:16px; outline:none; font-family:'Outfit', sans-serif;}
+    .form-group input:focus, .form-group textarea:focus { border-color:#D1B888; }
+    .form-group textarea { resize:vertical; min-height:90px; }
+    .form-error { display:none; background:rgba(255,71,87,0.12); border:1px solid #ff4757; color:#ff8f94; font-size:13px; padding:11px 13px; border-radius:10px; margin-bottom:16px; }
+    .form-error.show { display:block; }
 
+    /* Private booking steps */
+    .step { display:none; animation:fadeIn 0.4s ease; }
+    .step.active { display:block; }
+    .step-head { margin-bottom:22px; }
+    .step-head h2 { font-size:20px; color:#fff; margin-bottom:6px; }
+    .step-head p { font-size:13px; color:#a996cc; line-height:1.5; }
+    .info-card { background:rgba(43,29,82,0.5); border:1px solid rgba(209,184,136,0.2); border-radius:14px; padding:16px; margin-bottom:18px; font-size:13px; color:#b0a3c9; line-height:1.7;}
+    .info-card strong { color:#D1B888; }
+    .success-icon { width:72px; height:72px; background:rgba(46, 213, 115, 0.12); color:#2ed573; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:34px; margin:24px auto 20px; border:1px solid rgba(46,213,115,0.4);}
+
+    /* Ticket wallet (carousel) */
+    .ticket-slide { display:none; animation:slideIn 0.3s ease; width:100%; }
+    .ticket-slide.active { display:block; }
+    @keyframes slideIn { from {opacity:0; transform:scale(0.95);} to {opacity:1; transform:scale(1);} }
     .ticket-box { background:#fff; border-radius:20px; padding:30px 20px; text-align:center; color:#111; box-shadow:0 10px 40px rgba(0,0,0,0.5); position:relative; overflow:hidden; width:100%; }
     .ticket-box::before, .ticket-box::after { content:''; position:absolute; top:45%; width:30px; height:30px; background:#0a0514; border-radius:50%; transform:translateY(-50%); }
     .ticket-box::before { left:-15px; }
     .ticket-box::after { right:-15px; }
-    .ticket-divider { border-top: 2px dashed #ccc; margin: 20px 0; position:relative; top:-10px;}
-    
+    .ticket-divider { border-top:2px dashed #ccc; margin:20px 0; position:relative; top:-10px;}
     .qr-container { background:#fff; padding:10px; border-radius:10px; display:inline-block; margin-bottom:20px; border:4px solid #f4f4f4;}
     .qr-container img, .qr-container canvas { width:180px; height:180px; display:block; margin:0 auto; }
-
-    /* Carousel Navigation Controls */
     .nav-btn { background:rgba(209, 184, 136, 0.1); border:1px solid #D1B888; color:#D1B888; border-radius:50%; width:36px; height:36px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0;}
     .nav-btn:active { background:#D1B888; color:#0a0514; }
-    .nav-dots { display:flex; gap:8px; }
+    .nav-dots { display:flex; gap:8px; justify-content:center; margin-top:20px; }
     .dot { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,0.2); transition:background 0.3s;}
     .dot.active { background:#D1B888; }
 
     .loader { border:4px solid rgba(209, 184, 136, 0.2); border-top:4px solid #D1B888; border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; margin:40px auto; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @keyframes spin { 0% { transform:rotate(0deg);} 100% { transform:rotate(360deg);} }
 </style>
 </head>
 <body>
 
 <div class="bg-stars" id="star-bg"></div>
 
-<header>
+<!-- 3D ENTRY SPLASH -->
+<div id="solar" onclick="dismissSplash()">
+    <div id="three-container" style="position:absolute; inset:0; pointer-events:none;"></div>
+    <div id="solar-ui">
+        <div class="holo-text">
+            <h1>HEITKAMP<br>PLANETARIUM</h1>
+            <p id="tap-text">TAP TO CONTINUE</p>
+        </div>
+    </div>
+</div>
+
+<header onclick="goFront()">
     <h1>HEITKAMP PLANETARIUM</h1>
-    <p>Public Box Office & Ticketing</p>
+    <p id="header-sub">Public Box Office</p>
 </header>
 
 <div class="container">
-    
+
     <div id="loading" class="view active">
         <div class="loader"></div>
         <p style="text-align:center; color:#a996cc; font-size:14px;">Syncing live schedule...</p>
     </div>
 
+    <!-- FRONT PAGE -->
+    <div id="front" class="view">
+        <div class="front-tag">What brings you to the dome tonight?</div>
+        <button class="door" onclick="goView('storefront')">
+            <span class="door-icon">🎟️</span>
+            <div>
+                <h2>PUBLIC SHOWS</h2>
+                <p>Browse the schedule and reserve seats. QR tickets are emailed instantly.</p>
+            </div>
+        </button>
+        <button class="door" onclick="goView('booking')">
+            <span class="door-icon">🪐</span>
+            <div>
+                <h2>PRIVATE GROUP SHOW</h2>
+                <p>Schools, scouts & organizations — request a date for your own show.</p>
+            </div>
+        </button>
+        <p style="text-align:center; color:#6b5d8a; font-size:12px; margin-top:26px; line-height:1.7;">
+            Heitkamp Planetarium · behind King Christ Chapel<br>Up to 80 guests · handicap accessible
+        </p>
+    </div>
+
+    <!-- BOX OFFICE -->
     <div id="storefront" class="view">
+        <button class="back-link" onclick="goFront()">← All options</button>
         <h2 style="font-size:18px; margin-bottom:20px; color:#D1B888; font-family:'Orbitron', monospace;">UPCOMING SHOWS</h2>
         <div id="shows-list"></div>
     </div>
 
+    <!-- PRIVATE BOOKING -->
+    <div id="booking" class="view">
+        <button class="back-link" onclick="goFront()">← All options</button>
+
+        <div id="step1" class="step active">
+            <div class="step-head">
+                <h2>Request a Private Group Show</h2>
+                <p>Pick a date at least a week out so we can make the show truly special.</p>
+            </div>
+            <div class="info-card">
+                📍 <strong>Location</strong> — Heitkamp Planetarium, behind King Christ Chapel<br>
+                👥 <strong>Capacity</strong> — up to 80 attendees, handicap accessible<br>
+                ⏱️ <strong>Duration</strong> — standard shows run 45 minutes with Q&amp;A<br>
+                🎓 <strong>Customizable</strong> — topics tailored to your group's interests
+            </div>
+            <div class="form-group"><label>Preferred Date</label><input type="date" id="bookDate"></div>
+            <div class="form-group"><label>Preferred Time</label><input type="time" id="bookTime"></div>
+            <button class="btn" onclick="nextStep(1)">Next: Group Details →</button>
+        </div>
+
+        <div id="step2" class="step">
+            <div class="step-head">
+                <h2>Tell us about your group</h2>
+                <p>We need a few details to prepare the best experience for you.</p>
+            </div>
+            <div class="form-error" id="bkError"></div>
+            <div class="form-group"><label>Group / School Name</label><input type="text" id="groupName" placeholder="e.g. Tri-State Homeschool"></div>
+            <div class="form-group"><label>Contact Person</label><input type="text" id="contactName" placeholder="First and last name"></div>
+            <div class="form-group"><label>Email Address</label><input type="email" id="contactEmail" placeholder="email@example.com"></div>
+            <div class="form-group"><label>Estimated Number of Attendees</label><input type="number" id="groupSize" placeholder="e.g. 45"></div>
+            <div class="form-group"><label>What topics are you interested in?</label><textarea id="topics" placeholder="e.g. Solar System, Constellations, Space Exploration..."></textarea></div>
+            <div style="display:flex; gap:12px;">
+                <button class="btn btn-ghost" style="flex:1;" onclick="prevStep(2)">← Back</button>
+                <button class="btn" style="flex:1.5;" id="submitBtn" onclick="submitGroupRequest()">Submit Request</button>
+            </div>
+        </div>
+
+        <div id="step3" class="step" style="text-align:center;">
+            <div class="success-icon">✓</div>
+            <h2 style="font-size:24px; margin-bottom:14px;">Request Sent!</h2>
+            <p style="color:#a996cc; line-height:1.6; margin-bottom:26px; font-size:14px;">
+                Your request has been sent to the Planetarium staff for review.<br>
+                We'll contact you shortly at <strong id="confirmEmail" style="color:#D1B888;"></strong>.
+            </p>
+            <button class="btn btn-outline" onclick="goFront()">Back to Start</button>
+        </div>
+    </div>
+
+    <!-- TICKET WALLET -->
     <div id="ticket-view" class="view">
-        
         <div id="grouping-controls" style="display:none; text-align:center; margin-bottom:20px; background:rgba(43,29,82,0.6); padding:12px; border-radius:12px; border:1px solid rgba(209,184,136,0.3);">
             <label style="font-size:12px; color:#D1B888; font-weight:700; margin-right:8px; text-transform:uppercase;">Display Tickets:</label>
-            <select id="group-select" onchange="renderTicketWallet()" style="background:rgba(0,0,0,0.5); color:#fff; border:1px solid #D1B888; padding:6px 12px; border-radius:8px; outline:none; font-family:'Outfit'; font-size:14px;">
-                </select>
+            <select id="group-select" onchange="renderTicketWallet()" style="background:rgba(0,0,0,0.5); color:#fff; border:1px solid #D1B888; padding:6px 12px; border-radius:8px; outline:none; font-family:'Outfit'; font-size:14px;"></select>
         </div>
 
         <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:15px;">
             <button class="nav-btn" onclick="changeTicket(-1)" id="nav-left" style="visibility:hidden;">&#10094;</button>
-            
             <div id="ticket-carousel" style="flex:1; position:relative; min-width:0;"></div>
-
             <button class="nav-btn" onclick="changeTicket(1)" id="nav-right" style="visibility:hidden;">&#10095;</button>
         </div>
 
-        <div class="nav-dots" id="carousel-dots" style="justify-content:center; margin-top:20px; display:none;"></div>
-
+        <div class="nav-dots" id="carousel-dots" style="display:none;"></div>
         <p style="color:#a996cc; font-size:13px; text-align:center; margin-top:16px;" id="swipe-hint">Present to staff. Swipe to view other tickets.</p>
-
-        <button class="btn btn-outline" style="margin-top:30px;" onclick="window.location.href=window.location.pathname">Browse More Shows</button>
+        <button class="btn btn-outline" style="margin-top:30px;" onclick="goHome()">Browse More Shows</button>
     </div>
 
 </div>
 
+<!-- SEAT RESERVATION MODAL -->
 <div class="modal-bg" id="bookingModal">
     <div class="modal">
         <h3 style="font-size:22px; margin-bottom:4px; color:#D1B888;" id="book-title">Reserve Tickets</h3>
         <p style="color:#a996cc; font-size:14px; margin-bottom:24px;" id="book-time">Date & Time</p>
-        
+
         <input type="hidden" id="book-id">
         <input type="hidden" id="book-max">
-        
+
+        <div class="form-error" id="modalError"></div>
+
         <div style="display:flex; gap:16px;">
             <div class="form-group" style="flex:2;">
                 <label>Full Name</label>
@@ -144,9 +267,9 @@
             <label>Email Address</label>
             <input type="email" id="bEmail" placeholder="Where we send the tickets">
         </div>
-        
+
         <div style="display:flex; gap:12px; margin-top:30px;">
-            <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('bookingModal').classList.remove('open')">Cancel</button>
+            <button class="btn btn-outline" style="flex:1;" onclick="closeBookingModal()">Cancel</button>
             <button class="btn" style="flex:1.5;" onclick="submitBooking()" id="confirmBtn">Confirm Reservation</button>
         </div>
     </div>
@@ -154,18 +277,17 @@
 
 <script>
 // ==========================================
-// 🔴 IMPORTANT: Paste your Web App URL here
-const API_URL = "https://script.google.com/macros/s/AKfycbz55rmtgwmQwJlZWKQYx2LoFoBmBXUFAUeqKhJR3xLcmvV5UsSou8-IP5ciucVfK-Yx7Q/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbz55rmtgwmQwJlZWKQYx2LoFoBmBXUFAUeqKhJR3xLcmvV5UsSou8-IP5ciucVfK-Yx7Q/exec";
+const REFRESH_MS = 30000;
 // ==========================================
 
 let publicShows = [];
 let ticketDataGlobal = {};
 let currentTicketIndex = 0;
 let slidesCount = 1;
+let touchstartX = 0, touchendX = 0;
 
-let touchstartX = 0;
-let touchendX = 0;
-
+/* ---------------- formatting ---------------- */
 function formatEventDate(rawDate) {
     if(!rawDate) return 'TBD';
     const dateStr = String(rawDate).split('T')[0];
@@ -178,19 +300,22 @@ function formatEventDate(rawDate) {
         if(parts.length === 3) d = new Date(parts[0], parts[1]-1, parts[2]);
     }
     if (d && !isNaN(d.getTime())) return d.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' });
-    return dateStr; 
+    return dateStr;
 }
-
 function formatTime(timeStr) {
     if(!timeStr) return 'TBD';
     const [h, m] = timeStr.split(':');
     if(!h || !m) return timeStr;
     const hh = parseInt(h);
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    const h12 = hh % 12 || 12;
-    return `${h12}:${m} ${ampm}`;
+    return `${hh % 12 || 12}:${m} ${hh >= 12 ? 'PM' : 'AM'}`;
+}
+function isUpcoming(ev) {
+    const d = new Date(String(ev.date).split('T')[0] + (ev.time ? 'T' + ev.time : 'T23:59:59'));
+    const now = new Date();
+    return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+/* ---------------- stars ---------------- */
 const starBg = document.getElementById('star-bg');
 for(let i=0; i<50; i++) {
     let star = document.createElement('div');
@@ -201,44 +326,190 @@ for(let i=0; i<50; i++) {
     starBg.appendChild(star);
 }
 
-window.onload = async () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    ticketDataGlobal = {
-        id: urlParams.get('ticket'),
-        name: urlParams.get('name') || "Guest",
-        title: urlParams.get('title') || "Planetarium Show",
-        date: urlParams.get('date') || "TBD",
-        count: parseInt(urlParams.get('count')) || 1
-    };
+/* ============================================================================
+   3D INTERACTIVE SPLASH SCREEN — identical to Staff App
+============================================================================ */
+let scene, camera, renderer, earthGroup, planetMesh, clouds, stars;
+let moonData = [];
+let mouseX = 0, mouseY = 0;
+let windowHalfX = window.innerWidth / 2, windowHalfY = window.innerHeight / 2;
 
-    if (ticketDataGlobal.id) {
-        setupGroupingDropdown();
-        renderTicketWallet();
-        setupSwipeListeners();
-        
-        document.getElementById('loading').classList.remove('active');
-        document.getElementById('ticket-view').classList.add('active');
-        return; 
+const PLANET_OPTIONS = [
+    { name: 'Mercury', map: 'mercury.jpg', hasClouds: false, atmosphereColor: 0x444444, hasRings: false, moons: [] },
+    { name: 'Venus', map: 'venus.jpg', hasClouds: true, atmosphereColor: 0xffbb55, hasRings: false, moons: [] },
+    { name: 'Earth', map: 'earth.jpg', hasClouds: true, atmosphereColor: 0x3388ff, hasRings: false, moons: [ { radius: 1.5, distance: 18, speed: 0.01, color: 0xcccccc, map: 'moon.jpg' } ] },
+    { name: 'Mars', map: 'mars.jpg', hasClouds: false, atmosphereColor: 0xff6633, hasRings: false, moons: [ { radius: 0.5, distance: 13, speed: 0.02, color: 0xaaaaaa, map: 'phobos.jpg' }, { radius: 0.3, distance: 16, speed: 0.015, color: 0xaaaaaa, map: 'deimos.jpg' } ] },
+    { name: 'Jupiter', map: 'jupiter.jpg', hasClouds: false, atmosphereColor: 0xffccaa, hasRings: false, moons: [ { radius: 1.2, distance: 16, speed: 0.015, color: 0xddddaa, map: 'io.jpg' }, { radius: 1.0, distance: 19, speed: 0.012, color: 0xffffff, map: 'europa.jpg' }, { radius: 1.8, distance: 23, speed: 0.009, color: 0xbbbbbb, map: 'ganymede.jpg' }, { radius: 1.5, distance: 28, speed: 0.007, color: 0x888888, map: 'callisto.jpg' } ] },
+    { name: 'Saturn', map: 'saturn.jpg', hasClouds: false, hasRings: true, ringMap: 'saturn_rings.png', ringInner: 12, ringOuter: 22, ringOpacity: 0.9, atmosphereColor: 0xeeddcc, moons: [ { radius: 0.6, distance: 25, speed: 0.018, color: 0xaaaaaa, map: 'enceladus.jpg' }, { radius: 0.8, distance: 28, speed: 0.014, color: 0xcccccc, map: 'tethys.jpg' }, { radius: 2.0, distance: 33, speed: 0.010, color: 0xffaa66, map: 'titan.jpg' }, { radius: 0.5, distance: 37, speed: 0.008, color: 0xaaaaaa, map: 'iapetus.jpg' } ] },
+    { name: 'Uranus', map: 'uranus.jpg', hasClouds: false, hasRings: true, ringInner: 14, ringOuter: 18, ringOpacity: 0.5, ringColor: 0x66ccff, atmosphereColor: 0x66ccff, moons: [ { radius: 0.7, distance: 21, speed: 0.012, color: 0xaaaaaa, map: 'titania.jpg' }, { radius: 0.6, distance: 24, speed: 0.010, color: 0x999999, map: 'oberon.jpg' } ] },
+    { name: 'Neptune', map: 'neptune.jpg', hasClouds: false, atmosphereColor: 0x3366ff, hasRings: false, moons: [ { radius: 1.2, distance: 18, speed: 0.015, color: 0xcccccc, map: 'triton.jpg' } ] },
+    { name: 'Pluto', map: 'pluto.jpg', hasClouds: false, atmosphereColor: 0xcccccc, hasRings: false, moons: [ { radius: 6, distance: 35, speed: 0.005, color: 0x999999, map: 'charon.jpg' } ] }
+];
+
+const atmosphereVertexShader = `varying vec3 vNormal; void main() { vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const atmosphereFragmentShader = `varying vec3 vNormal; uniform vec3 glowColor; void main() { float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 4.0); gl_FragColor = vec4(glowColor, 1.0) * intensity; }`;
+
+function init3D() {
+    const container = document.getElementById('three-container');
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const isMobile = window.innerWidth < 768;
+    const cameraZ = isMobile ? 70 : 45;
+    const cameraY = isMobile ? 2 : 5;
+
+    camera.position.set(0, cameraY, cameraZ);
+    renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(2500 * 3);
+    for(let i=0; i<7500; i++) starPos[i] = (Math.random() - 0.5) * 500;
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(8, 8, 0, 8, 8, 8);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 16, 16);
+    const starTexture = new THREE.CanvasTexture(canvas);
+
+    stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 0.8, map: starTexture, depthWrite: false }));
+    scene.add(stars);
+
+    scene.add(new THREE.AmbientLight(0x111111));
+    const sunLight = new THREE.DirectionalLight(0xffeedd, 2.0);
+    sunLight.position.set(20, 10, 15);
+    scene.add(sunLight);
+
+    earthGroup = new THREE.Group();
+    scene.add(earthGroup);
+
+    const texLoader = new THREE.TextureLoader();
+    const currentPlanet = PLANET_OPTIONS[Math.floor(Math.random() * PLANET_OPTIONS.length)];
+
+    const planetGeo = new THREE.SphereGeometry(10, 64, 64);
+    const planetMat = new THREE.MeshStandardMaterial({ map: texLoader.load(currentPlanet.map), color: 0xaaaaaa, roughness: 0.8, metalness: 0.0 });
+    planetMesh = new THREE.Mesh(planetGeo, planetMat);
+    earthGroup.add(planetMesh);
+
+    const atmosphereMat = new THREE.ShaderMaterial({ vertexShader: atmosphereVertexShader, fragmentShader: atmosphereFragmentShader, uniforms: { glowColor: { value: new THREE.Color(currentPlanet.atmosphereColor) } }, blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true });
+    const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(11.2, 64, 64), atmosphereMat);
+    earthGroup.add(atmosphere);
+
+    if (currentPlanet.hasClouds) {
+        const cloudGeo = new THREE.SphereGeometry(10.15, 64, 64);
+        const cloudMat = new THREE.MeshStandardMaterial({ map: texLoader.load('https://unpkg.com/three-globe/example/img/earth-clouds10k.png'), transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending });
+        clouds = new THREE.Mesh(cloudGeo, cloudMat);
+        earthGroup.add(clouds);
     }
 
-    try {
-        if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") {
-            document.getElementById('shows-list').innerHTML = "<p style='color:#ff4757; text-align:center; background:rgba(255,0,0,0.1); padding:20px; border-radius:12px;'>API URL NOT SET.</p>";
-            document.getElementById('loading').classList.remove('active');
-            document.getElementById('storefront').classList.add('active');
-            return;
+    if (currentPlanet.hasRings) {
+        const ringGeo = new THREE.RingGeometry(currentPlanet.ringInner, currentPlanet.ringOuter, 64, 32);
+        const pos = ringGeo.attributes.position;
+        const uvs = ringGeo.attributes.uv;
+        for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i); const y = pos.getY(i);
+            const radius = Math.sqrt(x * x + y * y);
+            const u = (radius - currentPlanet.ringInner) / (currentPlanet.ringOuter - currentPlanet.ringInner);
+            uvs.setXY(i, u, 0.5);
         }
+        uvs.needsUpdate = true;
+        let ringMatOptions = { transparent: true, opacity: currentPlanet.ringOpacity, side: THREE.DoubleSide };
+        if (currentPlanet.ringMap) { ringMatOptions.map = texLoader.load(currentPlanet.ringMap); ringMatOptions.color = 0xffffff; } else { ringMatOptions.color = currentPlanet.ringColor; }
+        const ringMat = new THREE.MeshStandardMaterial(ringMatOptions);
+        const rings = new THREE.Mesh(ringGeo, ringMat);
+        rings.rotation.x = Math.PI / 2;
+        earthGroup.add(rings);
+    }
+
+    currentPlanet.moons.forEach(m => {
+        const pivot = new THREE.Group();
+        earthGroup.add(pivot);
+        const moonGeo = new THREE.SphereGeometry(m.radius, 32, 32);
+        let moonMatOptions = { roughness: 1.0 };
+        if (m.map && m.map !== '') { moonMatOptions.map = texLoader.load(m.map); moonMatOptions.color = 0xffffff; } else { moonMatOptions.color = m.color; }
+        const moonMat = new THREE.MeshStandardMaterial(moonMatOptions);
+        const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+        moonMesh.position.set(m.distance, 0, 0);
+        pivot.add(moonMesh);
+        moonData.push({ pivot: pivot, mesh: moonMesh, speed: m.speed });
+    });
+
+    document.getElementById('solar').addEventListener('mousemove', onMouseMove, false);
+    document.getElementById('solar').addEventListener('touchmove', onTouchMove, {passive: true});
+    window.addEventListener('resize', onWindowResize, false);
+    animate();
+}
+
+function onMouseMove(e) { mouseX = (e.clientX - windowHalfX) * 0.002; mouseY = (e.clientY - windowHalfY) * 0.002; }
+function onTouchMove(e) { mouseX = (e.touches[0].clientX - windowHalfX) * 0.002; mouseY = (e.touches[0].clientY - windowHalfY) * 0.002; }
+function onWindowResize() {
+    windowHalfX = window.innerWidth / 2;
+    windowHalfY = window.innerHeight / 2;
+    camera.aspect = window.innerWidth / window.innerHeight;
+    const dist = window.innerWidth < 768 ? 70 : 45;
+    camera.position.z = dist;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+function animate() {
+    requestAnimationFrame(animate);
+    if(planetMesh) planetMesh.rotation.y += 0.002;
+    if(clouds) clouds.rotation.y += 0.0025;
+    if(stars) stars.rotation.y += 0.0002;
+    moonData.forEach(m => { m.pivot.rotation.y -= m.speed; m.mesh.rotation.y += 0.005; });
+    camera.position.x += (mouseX * 15 - camera.position.x) * 0.05;
+    camera.position.y += (-mouseY * 15 + 5 - camera.position.y) * 0.05;
+    camera.lookAt(scene.position);
+    earthGroup.rotation.x += (mouseY - earthGroup.rotation.x) * 0.05;
+    earthGroup.rotation.y += (mouseX - earthGroup.rotation.y) * 0.05;
+    renderer.render(scene, camera);
+}
+
+/* ---------------- splash & navigation ---------------- */
+let splashDone = false;
+function dismissSplash() {
+    if (splashDone) return;
+    splashDone = true;
+    const tapText = document.getElementById('tap-text');
+    tapText.textContent = "OPENING THE DOME...";
+    tapText.style.color = "#2ed573";
+    tapText.style.animation = "pulse-fast 0.5s infinite";
+
+    setTimeout(() => {
+        document.getElementById('solar-ui').style.opacity = '0';
+        document.getElementById('solar').classList.add('hidden');
+        setTimeout(() => document.getElementById('solar').classList.add('gone'), 400);
+    }, 300);
+}
+
+function goView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    const subs = { front: 'Public Box Office', storefront: 'Public Box Office & Ticketing', booking: 'Private Group Requests', 'ticket-view': 'Your Tickets' };
+    document.getElementById('header-sub').textContent = subs[id] || 'Public Box Office';
+    window.scrollTo(0, 0);
+}
+function goFront() { goView('front'); }
+function goHome() { window.location.href = window.location.pathname; }
+
+/* ---------------- storefront ---------------- */
+async function fetchShows() {
+    try {
         const res = await fetch(API_URL);
         const data = await res.json();
-        publicShows = (data.events || []).sort((a,b) => new Date(a.date) - new Date(b.date));
+        publicShows = (data.events || [])
+            .filter(e => !e.archived && isUpcoming(e))
+            .sort((a,b) => new Date(a.date) - new Date(b.date));
         renderShows();
     } catch(err) {
-        document.getElementById('shows-list').innerHTML = "<p style='text-align:center; color:#ff4757;'>Unable to load schedule.</p>";
+        document.getElementById('shows-list').innerHTML = "<p style='text-align:center; color:#ff4757;'>Unable to load schedule. Check your connection and pull to refresh.</p>";
     }
-    
-    document.getElementById('loading').classList.remove('active');
-    document.getElementById('storefront').classList.add('active');
-};
+}
 
 function renderShows() {
     const list = document.getElementById('shows-list');
@@ -247,14 +518,12 @@ function renderShows() {
         return;
     }
 
-    // 🚨 NEW: Pull any reservations made locally on this device
     let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
 
     list.innerHTML = publicShows.map(show => {
-        // Calculate true availability (Max - Scanned at door - Reserved locally right now)
         const deviceReserved = localBookings[show.id] || 0;
-        const available = show.max - (show.reserved || 0) - (show.scanned || 0) - deviceReserved;
-        
+        const available = Math.max(0, show.max - (show.reserved || 0) - (show.scanned || 0) - deviceReserved);
+
         let badgeHTML = `<div class="capacity-badge">${available} Seats Left</div>`;
         if (available <= 0) badgeHTML = `<div class="capacity-badge sold-out">SOLD OUT</div>`;
 
@@ -264,54 +533,59 @@ function renderShows() {
             <div class="show-title">${show.title}</div>
             <div class="show-details">📅 ${formatEventDate(show.date)}</div>
             <div class="show-details">🕒 ${formatTime(show.time)}</div>
-            <div class="show-details">📍 ${show.location}</div>
-            
-            ${available > 0 ? `<button class="btn btn-small" style="margin-top:20px;" onclick="openBooking(${show.id}, ${available})">Reserve Tickets</button>` : `<button class="btn btn-small btn-outline" style="margin-top:20px; opacity:0.5; cursor:not-allowed;" disabled>Sold Out</button>`}
+            <div class="show-details">📍 ${show.location || 'Main Dome'}</div>
+
+            ${available > 0
+                ? `<button class="btn btn-small" style="margin-top:20px;" onclick="openBooking('${show.id}', ${available})">Reserve Tickets</button>`
+                : `<button class="btn btn-small btn-outline" style="margin-top:20px; opacity:0.5; cursor:not-allowed;" disabled>Sold Out</button>`}
         </div>`;
     }).join('');
 }
 
+/* ---------------- seat reservation ---------------- */
 function openBooking(id, availableSeats) {
     const show = publicShows.find(s => s.id == id);
     if(!show) return;
-    
+
     document.getElementById('book-id').value = show.id;
-    document.getElementById('book-max').value = availableSeats; 
-    document.getElementById('bCount').value = 1; 
-    document.getElementById('bCount').max = availableSeats; 
+    document.getElementById('book-max').value = availableSeats;
+    document.getElementById('bCount').value = 1;
+    document.getElementById('bCount').max = availableSeats;
 
     document.getElementById('book-title').textContent = show.title;
     document.getElementById('book-time').textContent = `${formatEventDate(show.date)} @ ${formatTime(show.time)}`;
+    document.getElementById('modalError').classList.remove('show');
     document.getElementById('bookingModal').classList.add('open');
+}
+function closeBookingModal() { document.getElementById('bookingModal').classList.remove('open'); }
+
+function modalError(msg) {
+    const e = document.getElementById('modalError');
+    e.textContent = msg;
+    e.classList.add('show');
 }
 
 async function submitBooking() {
-   const btn = document.getElementById('confirmBtn');
+    const btn = document.getElementById('confirmBtn');
     if (btn.disabled) return;
-    btn.disabled = true;
-    btn.textContent = 'Processing...';
-   btn.disabled = false;
-    btn.textContent = 'Confirm Reservation';
+
     const evId = document.getElementById('book-id').value;
     const maxAllowed = parseInt(document.getElementById('book-max').value);
-    const name = document.getElementById('bName').value;
-    const email = document.getElementById('bEmail').value;
+    const name = document.getElementById('bName').value.trim();
+    const email = document.getElementById('bEmail').value.trim();
     const count = parseInt(document.getElementById('bCount').value);
 
-    if(!name || !email) { alert("Please fill out your name and email."); return; }
-    if(count < 1 || count > maxAllowed) { alert(`Please select a valid number of seats (1 to ${maxAllowed}).`); return; }
-    
+    if(!name) return modalError("Please enter your name.");
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return modalError("Please enter a valid email address.");
+    if(!count || count < 1 || count > maxAllowed) return modalError(`Please select 1 to ${maxAllowed} seats.`);
+
     const show = publicShows.find(s => s.id == evId);
-    document.getElementById('bookingModal').classList.remove('open');
+    if(!show) return modalError("That show is no longer available.");
 
-    // 1. SAVE LOCALLY (Temporary UI update)
-    let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
-    localBookings[evId] = (localBookings[evId] || 0) + count;
-    localStorage.setItem('planetarium_bookings', JSON.stringify(localBookings));
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
 
-    // 2. SYNC TO CLOUD
     try {
-                // Prepare payload for automated email and seat update
         const payload = {
             action: 'reserve_seats',
             eventId: evId,
@@ -325,45 +599,103 @@ async function submitBooking() {
             }
         };
 
-        try {
-            await fetch(API_URL, {
-                method: 'POST',
-                redirect: 'follow',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
-            });
-        } catch(e) {
-            console.error("Cloud sync failed:", e);
-        }
-        
-        // Clear local tracking (cloud is now source of truth)
-        localBookings[evId] = 0;
+        await fetch(API_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        });
+
+        let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
+        localBookings[evId] = (localBookings[evId] || 0) + count;
         localStorage.setItem('planetarium_bookings', JSON.stringify(localBookings));
-        
-        alert(`Reservation complete! Tickets sent to ${email}.`);
-        // After successful booking
-const ticketUrl = `${window.location.pathname}?ticket=${evId}&name=${encodeURIComponent(name)}&title=${encodeURIComponent(show.title)}&date=${encodeURIComponent(show.date)}&count=${count}`;
-window.location.href = ticketUrl;
-       
+
+        closeBookingModal();
+        const ticketUrl = `${window.location.pathname}?ticket=${evId}&name=${encodeURIComponent(name)}&title=${encodeURIComponent(show.title)}&date=${encodeURIComponent(show.date)}&time=${encodeURIComponent(show.time || '')}&count=${count}`;
+        window.location.href = ticketUrl;
     } catch(e) {
-        alert("Reservation confirmed locally, but cloud sync failed.");
+        modalError("Connection failed — your seats were NOT booked. Please try again.");
+        btn.disabled = false;
+        btn.textContent = 'Confirm Reservation';
     }
-   
 }
 
-// ============================================================================
-// CAROUSEL & GROUPING LOGIC
-// ============================================================================
+/* ---------------- private group request ---------------- */
+function nextStep(current) {
+    if(current === 1) {
+        if(!document.getElementById('bookDate').value || !document.getElementById('bookTime').value) {
+            alert("Please select a date and time.");
+            return;
+        }
+    }
+    document.getElementById(`step${current}`).classList.remove('active');
+    document.getElementById(`step${current + 1}`).classList.add('active');
+}
+function prevStep(current) {
+    document.getElementById(`step${current}`).classList.remove('active');
+    document.getElementById(`step${current - 1}`).classList.add('active');
+}
 
+async function submitGroupRequest() {
+    const btn = document.getElementById('submitBtn');
+    if (btn.disabled) return;
+
+    const group = document.getElementById('groupName').value.trim();
+    const contact = document.getElementById('contactName').value.trim();
+    const email = document.getElementById('contactEmail').value.trim();
+    const size = document.getElementById('groupSize').value;
+    const date = document.getElementById('bookDate').value;
+    const time = document.getElementById('bookTime').value;
+    const topics = document.getElementById('topics').value.trim() || "General Show";
+
+    const errEl = document.getElementById('bkError');
+    errEl.classList.remove('show');
+    const fail = (msg) => { errEl.textContent = msg; errEl.classList.add('show'); };
+
+    if(!group || !contact || !email || !size || !date || !time) return fail("Please fill out all required fields.");
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("Please enter a valid email address.");
+
+    const payload = {
+        action: "submitBooking",
+        id: Math.floor(Math.random() * 1000000),
+        group, contact, email, date, time,
+        size: parseInt(size),
+        topics,
+        status: "pending"
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Sending Request...';
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if(!result.success) throw new Error(result.message || "Unknown error");
+
+        document.getElementById('step2').classList.remove('active');
+        document.getElementById('confirmEmail').textContent = email;
+        document.getElementById('step3').classList.add('active');
+        window.scrollTo(0, 0);
+    } catch(err) {
+        fail("There was an error submitting your request: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit Request';
+    }
+}
+
+/* ---------------- ticket wallet ---------------- */
 function setupGroupingDropdown() {
     if(ticketDataGlobal.count <= 1) return;
     const select = document.getElementById('group-select');
     let html = `<option value="1">1 at a time</option>`;
-    
     for(let i=2; i<=ticketDataGlobal.count; i++) {
-        if(i <= 5 || i === ticketDataGlobal.count) { 
-            html += `<option value="${i}">${i} at a time</option>`;
-        }
+        if(i <= 5 || i === ticketDataGlobal.count) html += `<option value="${i}">${i} at a time</option>`;
     }
     select.innerHTML = html;
     document.getElementById('grouping-controls').style.display = 'block';
@@ -371,11 +703,10 @@ function setupGroupingDropdown() {
 
 function renderTicketWallet() {
     const groupSize = parseInt(document.getElementById('group-select')?.value || 1);
-    const { id, name, title, date, count } = ticketDataGlobal;
+    const { id, name, title, date, time, count } = ticketDataGlobal;
     const container = document.getElementById('ticket-carousel');
     let html = '';
 
-    // Calculate chunks based on groupSize dropdown
     const chunks = [];
     let remaining = count;
     while(remaining > 0) {
@@ -383,7 +714,7 @@ function renderTicketWallet() {
         chunks.push(chunk);
         remaining -= chunk;
     }
-    
+
     slidesCount = chunks.length;
     currentTicketIndex = 0;
 
@@ -397,29 +728,31 @@ function renderTicketWallet() {
             <div class="ticket-box">
                 <h2 style="font-family:'Orbitron', monospace; color:${headerColor}; font-size:24px; letter-spacing:2px;">${admitText}</h2>
                 <p style="color:#888; font-size:12px; margin-top:4px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Heitkamp Planetarium</p>
-                
+
                 <div style="height:30px;"></div>
                 <div class="ticket-divider"></div>
-                
+
                 <div class="qr-container" id="qr-code-${index}"></div>
-                
+
                 <h3 style="font-size:22px; font-weight:700; margin-bottom:8px; line-height:1.2;">${title}</h3>
-                <p style="color:#442D7D; font-weight:700; font-size:15px;">${date}</p>
+                <p style="color:#442D7D; font-weight:700; font-size:15px;">${formatEventDate(date)}${time ? ' @ ' + formatTime(time) : ''}</p>
                 <p style="color:#888; font-size:13px; margin-top:20px; background:#f4f4f4; padding:10px; border-radius:8px;">Reserved under: <span style="font-weight:700; color:#111;">${name}</span></p>
             </div>
         </div>`;
     });
     container.innerHTML = html;
 
-    // Render exact QR Codes
     chunks.forEach((chunkSize, index) => {
-        // TICKET|ID|GROUP|SIZE or standard TICKET|ID|SINGLE|INDEX
-        const qrText = chunkSize > 1 
-    ? `TICKET|${id}|GROUP|${index+1}|${chunkSize}` 
-    : `TICKET|${id}|SINGLE|${index+1}`;
-        new QRCode(document.getElementById(`qr-code-${index}`), {
-            text: qrText, width: 180, height: 180, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H
-        });
+        const qrText = chunkSize > 1
+            ? `TICKET|${id}|GROUP|${index+1}|${chunkSize}`
+            : `TICKET|${id}|SINGLE|${index+1}`;
+        const host = document.getElementById(`qr-code-${index}`);
+        if (typeof QRCode !== 'undefined') {
+            new QRCode(host, { text: qrText, width: 180, height: 180, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H });
+        } else {
+            host.style.cssText = 'padding:20px;font-family:monospace;font-size:11px;color:#000;word-break:break-all;';
+            host.textContent = qrText;
+        }
     });
 
     updateNavUI();
@@ -430,14 +763,14 @@ function updateNavUI() {
     const btnL = document.getElementById('nav-left');
     const btnR = document.getElementById('nav-right');
     const hint = document.getElementById('swipe-hint');
-    
+
     if (slidesCount > 1) {
         btnL.style.visibility = 'visible'; btnR.style.visibility = 'visible';
         dotsContainer.style.display = 'flex';
         hint.style.display = 'block';
-        
+
         let dotsHTML = '';
-        for(let i=0; i<slidesCount; i++) { dotsHTML += `<div class="dot ${i === 0 ? 'active' : ''}" id="dot-${i}"></div>`; }
+        for(let i=0; i<slidesCount; i++) dotsHTML += `<div class="dot ${i === 0 ? 'active' : ''}" id="dot-${i}"></div>`;
         dotsContainer.innerHTML = dotsHTML;
     } else {
         btnL.style.visibility = 'hidden'; btnR.style.visibility = 'hidden';
@@ -450,9 +783,7 @@ function changeTicket(direction) {
     if(slidesCount <= 1) return;
     document.getElementById(`slide-${currentTicketIndex}`).classList.remove('active');
     document.getElementById(`dot-${currentTicketIndex}`).classList.remove('active');
-
     currentTicketIndex = (currentTicketIndex + direction + slidesCount) % slidesCount;
-
     document.getElementById(`slide-${currentTicketIndex}`).classList.add('active');
     document.getElementById(`dot-${currentTicketIndex}`).classList.add('active');
 }
@@ -468,6 +799,45 @@ function setupSwipeListeners() {
         }
     }, {passive: true});
 }
+
+/* ---------------- boot ---------------- */
+window.onload = async () => {
+    init3D();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    ticketDataGlobal = {
+        id: urlParams.get('ticket'),
+        name: urlParams.get('name') || "Guest",
+        title: urlParams.get('title') || "Planetarium Show",
+        date: urlParams.get('date') || "TBD",
+        time: urlParams.get('time') || "",
+        count: parseInt(urlParams.get('count')) || 1
+    };
+
+    if (ticketDataGlobal.id) {
+        // Ticket link from email — skip the splash, go straight to the wallet.
+        dismissSplash();
+        setupGroupingDropdown();
+        renderTicketWallet();
+        setupSwipeListeners();
+        document.getElementById('loading').classList.remove('active');
+        goView('ticket-view');
+        return;
+    }
+
+    document.getElementById('loading').classList.remove('active');
+    goView('front');
+    fetchShows();
+    setInterval(fetchShows, REFRESH_MS);
+
+    // deep link: ?view=booking opens the private form directly
+    if (urlParams.get('view') === 'booking') goView('booking');
+    if (urlParams.get('view') === 'shows') goView('storefront');
+
+    // Set minimum private-booking date to one week out
+    const minDate = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+    document.getElementById('bookDate').setAttribute('min', minDate);
+};
 </script>
 </body>
 </html>
