@@ -157,6 +157,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast.error{background:var(--danger); color:#fff;}
 </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -315,6 +316,18 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
     </div>
 </div>
 
+<div class="modal-bg" id="archiveModal">
+    <div class="modal">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <h3 style="color:var(--text-dark); font-size:20px;">📦 Archived Shows</h3>
+            <button onclick="closeModal('archiveModal')" style="background:transparent; border:none; font-size:22px; color:var(--muted-dark); cursor:pointer; padding:4px 8px;">✖</button>
+        </div>
+        <p style="color:var(--muted-dark); font-size:13px; margin-bottom:20px;">Hidden from the schedule. Restore any show to bring it back.</p>
+        <div id="archiveList"></div>
+        <button class="btn btn-outline" style="margin-top:10px;" onclick="closeModal('archiveModal')">Close</button>
+    </div>
+</div>
+
 <div class="modal-bg" id="roleModal">
     <div class="modal">
         <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:20px;">Manage Staff Positions</h3>
@@ -347,7 +360,7 @@ let APP = {
     time: { total: 0, max: 1000 },
     timeLogs: [],
     users: [
-        {id:1, name:'Alice President', role:'president', username:'alice@school.edu', password:'password123', darkMode: false} 
+        {id:1, name:'Alice President', role:'president', username:'alice@school.edu', password:'password123', darkMode: false, maxHours: 40} 
     ],
     settings: { inviteKey: 'STARLIGHT', notifsEnabled: true, pauseShows: false },
     currentUser: null
@@ -823,7 +836,8 @@ async function submitRegistration() {
         role: 'staff', 
         username: username,
         password: password, 
-        darkMode: false 
+        darkMode: false,
+        maxHours: 40
     };
     
     APP.users.push(newUser);
@@ -1096,6 +1110,7 @@ function renderCurrentPage() {
 
         const myLogs = (APP.timeLogs || []).filter(l => l.staffId === APP.currentUser.id).reverse();
         const myTotalHours = myLogs.reduce((sum, l) => sum + (Number(l.minutes)/60), 0);
+        const myMaxHours = APP.currentUser.maxHours ?? 40;
 
         const historyHTML = myLogs.slice(0, 5).map(l => `
             <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border-light); font-size:14px;">
@@ -1109,20 +1124,29 @@ function renderCurrentPage() {
             const rosterStats = APP.users.map(u => {
                 const uLogs = (APP.timeLogs || []).filter(l => l.staffId === u.id);
                 const uHrs = uLogs.reduce((sum, l) => sum + (Number(l.minutes)/60), 0);
+                const uMax = u.maxHours ?? 40;
+                const pct = Math.min((uHrs / uMax) * 100, 100);
+                const overLimit = uHrs > uMax;
                 return `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-light);">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <div class="staff-avatar" style="width:28px; height:28px; font-size:12px;">${u.name.charAt(0)}</div>
-                        <span style="color:var(--text-dark); font-size:14px; font-weight:600;">${u.name}</span>
+                <div style="padding:12px 0; border-bottom:1px solid var(--border-light);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="staff-avatar" style="width:28px; height:28px; font-size:12px;">${u.name.charAt(0)}</div>
+                            <span style="color:var(--text-dark); font-size:14px; font-weight:600;">${u.name}</span>
+                        </div>
+                        <span style="color:${overLimit ? 'var(--danger)' : 'var(--surface)'}; font-weight:700; font-size:13px;">${uHrs.toFixed(2)} / ${uMax} hrs</span>
                     </div>
-                    <span style="color:var(--surface); font-weight:700; font-size:14px;">${uHrs.toFixed(2)} hrs</span>
+                    <div class="progress-container" style="height:10px; margin-top:0;">
+                        <div class="progress-bar ${overLimit ? '' : 'personal'}" style="width: ${pct}%; ${overLimit ? 'background:var(--danger);' : ''}"></div>
+                    </div>
                 </div>`;
             }).join('');
-            
+
             adminRosterHTML = `
             <div class="mobile-card" style="margin-top:20px;">
-                <strong style="color:var(--text-dark); margin-bottom:8px; display:block;">Admin: Staff Hour Roster</strong>
+                <strong style="color:var(--text-dark); margin-bottom:8px; display:block;">Admin: Staff Hours vs. Allotment</strong>
                 ${rosterStats}
+                <p style="font-size:11px; color:var(--muted-dark); margin-top:12px;">Set individual limits in Settings → Manage Roles.</p>
             </div>`;
         }
 
@@ -1144,11 +1168,11 @@ function renderCurrentPage() {
             </div>
 
             <div class="mobile-card">
-                <strong style="color:var(--text-dark);">Your Total Hours</strong>
+                <strong style="color:var(--text-dark);">Your Hours</strong>
                 <div class="progress-container">
-                    <div class="progress-bar personal" style="width: ${Math.min((myTotalHours/40)*100, 100)}%"></div>
+                    <div class="progress-bar personal" style="width: ${Math.min((myTotalHours/myMaxHours)*100, 100)}%"></div>
                 </div>
-                <p style="font-size:12px; color:var(--muted-dark); text-align:right; margin-top:4px;">${myTotalHours.toFixed(2)} hrs</p>
+                <p style="font-size:12px; color:var(--muted-dark); text-align:right; margin-top:4px;">${myTotalHours.toFixed(2)} / ${myMaxHours} hrs allotted</p>
                 
                 <div style="margin-top:30px; text-align:center;">
                     <p style="font-size:12px; color:var(--muted-dark); text-transform:uppercase;">Current Session</p>
@@ -1196,15 +1220,6 @@ function renderCurrentPage() {
             .filter(e => e.archived)
             .sort((a,b) => new Date(b.date) - new Date(a.date));
 
-        const archivedHTML = archivedShows.length ? archivedShows.map(ev => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-light);">
-                <div>
-                    <div style="font-weight:700; font-size:14px; color:var(--text-dark);">${ev.title || ev.group}</div>
-                    <div style="font-size:11px; color:var(--muted-dark); margin-top:2px;">${formatEventDate(ev.date)} · ${ev._type === 'public' ? 'PUBLIC' : 'PRIVATE'}${ev._type === 'public' ? ` · ${ev.reserved||0} Rsvd · ${ev.scanned||0} In` : ''}</div>
-                </div>
-                ${isAdmin ? `<button class="btn btn-outline btn-small" style="width:auto;" onclick="unarchiveEvent(${ev.id}, '${ev._type}')">Restore</button>` : ''}
-            </div>`).join('') : '<p style="font-size:12px; color:var(--muted-dark); padding:10px 0;">No archived shows.</p>';
-
         main.innerHTML = `<div class="wpage active">
             <h2 style="color:var(--text-dark); margin-bottom:24px;">Settings</h2>
 
@@ -1243,8 +1258,15 @@ function renderCurrentPage() {
             ${adminUI}
 
             <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-top:24px; margin-bottom:12px;">📦 Archived Shows</h3>
-            <div class="mobile-card">
-                ${archivedHTML}
+            <div class="mobile-card clickable" onclick="openArchiveModal()" style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="font-size:24px;">📦</div>
+                    <div>
+                        <div style="font-weight:700; font-size:14px; color:var(--text-dark);">${archivedShows.length} Archived Show${archivedShows.length === 1 ? '' : 's'}</div>
+                        <div style="font-size:11px; color:var(--muted-dark); margin-top:2px;">${archivedShows.length ? 'Tap to browse the archive' : 'Nothing archived yet'}</div>
+                    </div>
+                </div>
+                <div style="font-size:20px; color:var(--muted-dark);">→</div>
             </div>
 
             ${LOGIN_ENABLED ? `
@@ -1367,9 +1389,53 @@ async function unarchiveEvent(id, type) {
     ev.archived = false;
     showToast("Show restored to schedule.", "success");
     renderCurrentPage();
+    // If the archive browser is open, refresh it in place
+    if (document.getElementById('archiveModal').classList.contains('open')) renderArchiveList();
     document.getElementById('cloud-syncing').classList.add('active');
     await pushCloudData();
     document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+function openArchiveModal() {
+    renderArchiveList();
+    document.getElementById('archiveModal').classList.add('open');
+}
+
+function renderArchiveList() {
+    const isAdmin = (APP.currentUser.role === 'president' || APP.currentUser.role === 'manager');
+    const archivedShows = [...APP.events.map(e => ({...e, _type:'public'})), ...APP.requests.map(r => ({...r, _type:'private'}))]
+        .filter(e => e.archived)
+        .sort((a,b) => new Date(b.date) - new Date(a.date));
+
+    const list = document.getElementById('archiveList');
+
+    if (!archivedShows.length) {
+        list.innerHTML = `<p style="color:var(--muted-dark); text-align:center; padding:30px 10px; background:var(--card-bg); border-radius:16px;">No archived shows.</p>`;
+        return;
+    }
+
+    list.innerHTML = archivedShows.map(ev => {
+        const isPublic = ev._type === 'public';
+        const badge = isPublic ? `<span class="badge badge-public">PUBLIC</span>` : `<span class="badge badge-private">PRIVATE</span>`;
+        const title = ev.title || ev.group;
+        const locOrTopic = ev.location || ev.topics;
+        const reserved = ev.reserved || 0;
+        const scanned = ev.scanned || 0;
+
+        return `
+        <div class="mobile-card" style="border-top:4px solid var(--muted-dark);">
+            <div class="card-header"><div class="card-title">${title}</div>${badge}</div>
+            <div class="card-detail"><span>📅</span> ${formatEventDate(ev.date)} @ ${formatTime(ev.time)}</div>
+            <div class="card-detail"><span>📍</span> ${locOrTopic}</div>
+            ${isPublic ? `
+            <div class="card-detail"><span>🎟️</span> Reserved: ${reserved}</div>
+            <div class="card-detail"><span>🎫</span> Checked In: ${scanned}</div>
+            <div class="card-detail"><span>🪑</span> Capacity: ${ev.max || 'N/A'}</div>` : `
+            <div class="card-detail"><span>👥</span> Group Size: ${ev.size || ev.spots || 'N/A'}</div>
+            <div class="card-detail"><span>👤</span> Contact: ${ev.contact || ev.email || 'No Email Provided'}</div>`}
+            ${isAdmin ? `<button class="btn btn-primary" style="margin-top:14px;" onclick="unarchiveEvent(${ev.id}, '${ev._type}')">↩️ Restore to Schedule</button>` : ''}
+        </div>`;
+    }).join('');
 }
 
 // 🚨 NEW: Native Email App Integration for Rescheduling
@@ -1575,24 +1641,33 @@ async function toggleSetting(key, value) {
 
 function openRoleModal() {
     const list = document.getElementById('roleList');
-    
+
     list.innerHTML = APP.users.map(u => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--bg-main); border-radius:12px; border:1px solid var(--border-light);">
-            <div style="display:flex; align-items:center; gap:10px;">
-                <div class="staff-avatar" style="width:28px; height:28px; font-size:12px;">${u.name.charAt(0)}</div>
-                <span style="color:var(--text-dark); font-size:14px; font-weight:600;">${u.name}</span>
+        <div style="padding:12px; background:var(--bg-main); border-radius:12px; border:1px solid var(--border-light);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div class="staff-avatar" style="width:28px; height:28px; font-size:12px;">${u.name.charAt(0)}</div>
+                    <span style="color:var(--text-dark); font-size:14px; font-weight:600;">${u.name}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <select id="role-${u.id}" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border-light); background:var(--card-bg); color:var(--text-dark); font-family:var(--font); outline:none; font-size:14px; font-weight:500;">
+                        <option value="staff" ${u.role === 'staff' ? 'selected' : ''}>Staff</option>
+                        <option value="manager" ${u.role === 'manager' ? 'selected' : ''}>Manager</option>
+                        <option value="president" ${u.role === 'president' ? 'selected' : ''}>President</option>
+                    </select>
+                    <button style="background:var(--danger); color:white; border:none; border-radius:6px; width:28px; height:28px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" onclick="deleteUser(${u.id})" title="Remove Staff">✖</button>
+                </div>
             </div>
-            <div style="display:flex; align-items:center; gap:12px;">
-                <select id="role-${u.id}" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border-light); background:var(--card-bg); color:var(--text-dark); font-family:var(--font); outline:none; font-size:14px; font-weight:500;">
-                    <option value="staff" ${u.role === 'staff' ? 'selected' : ''}>Staff</option>
-                    <option value="manager" ${u.role === 'manager' ? 'selected' : ''}>Manager</option>
-                    <option value="president" ${u.role === 'president' ? 'selected' : ''}>President</option>
-                </select>
-                <button style="background:var(--danger); color:white; border:none; border-radius:6px; width:28px; height:28px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" onclick="deleteUser(${u.id})" title="Remove Staff">✖</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid var(--border-light);">
+                <label style="font-size:11px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:0.5px;">Hour Limit</label>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <input type="number" id="hours-${u.id}" value="${u.maxHours ?? 40}" min="1" style="width:70px; padding:6px 8px; border-radius:8px; border:1px solid var(--border-light); background:var(--card-bg); color:var(--text-dark); font-family:var(--font); outline:none; font-size:14px; text-align:center;">
+                    <span style="font-size:11px; color:var(--muted-dark);">hrs</span>
+                </div>
             </div>
         </div>
     `).join('');
-    
+
     document.getElementById('roleModal').classList.add('open');
 }
 
@@ -1608,11 +1683,17 @@ async function saveRoles() {
     APP.users.forEach(u => {
         const sel = document.getElementById(`role-${u.id}`);
         if(sel) u.role = sel.value;
+        const hrs = document.getElementById(`hours-${u.id}`);
+        if(hrs) {
+            const val = parseInt(hrs.value);
+            u.maxHours = (isNaN(val) || val < 1) ? 40 : val;
+        }
     });
 
     const me = APP.users.find(u => u.id === APP.currentUser.id);
     if(me) {
         APP.currentUser.role = me.role;
+        APP.currentUser.maxHours = me.maxHours ?? 40;
         const sessionUser = { ...APP.currentUser };
         delete sessionUser.password;
         localStorage.setItem('planetarium_user', JSON.stringify(sessionUser));
