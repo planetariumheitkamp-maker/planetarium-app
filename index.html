@@ -256,6 +256,16 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
             <div class="form-group" style="flex:1;"><label>Expected Size</label><input type="number" id="evSpots" placeholder="0"></div>
             <div class="form-group" style="flex:1;"><label>Max Capacity</label><input type="number" id="evMax" value="100"></div>
         </div>
+        <div class="form-group" id="evDescGroup" style="display:none;"><label>Description (shown on public page)</label><textarea id="evDesc" rows="3" placeholder="e.g. Travel through the rings of Saturn and discover..." style="width:100%;background:var(--card-bg);border:1px solid var(--border-light);color:var(--text-dark);border-radius:12px;padding:16px;font-size:16px;font-family:var(--font);outline:none;resize:vertical;"></textarea></div>
+        <div class="form-group" id="evImageGroup" style="display:none;">
+            <label>Poster Image (optional)</label>
+            <div id="evImagePreview" style="display:none; margin-bottom:10px; position:relative;">
+                <img id="evImagePreviewImg" style="width:100%; max-height:180px; object-fit:cover; border-radius:12px; border:1px solid var(--border-light);">
+                <button type="button" onclick="clearEventImage()" style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.7); color:#fff; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; font-size:14px;">✖</button>
+            </div>
+            <input type="file" id="evImage" accept="image/*" onchange="handleEventImage(this)" style="font-size:14px;">
+            <p style="font-size:11px; color:var(--muted-dark); margin-top:6px;">Compressed automatically to ~800px. Larger files may slow sync.</p>
+        </div>
         <div style="display:flex; gap:12px; margin-top:20px;" id="eventModalActions">
             <button class="btn btn-outline" style="flex:1; border-color:var(--danger); color:var(--danger); display:none;" id="btnDeleteEvent" onclick="deleteEvent()">Delete</button>
             <button class="btn btn-outline" style="flex:1;" onclick="closeModal('eventModal')">Cancel</button>
@@ -1285,17 +1295,19 @@ function openEventModal(id, type) {
     document.getElementById('evId').value = id || '';
     document.getElementById('evType').value = type;
     const deleteBtn = document.getElementById('btnDeleteEvent');
-    
+    const isPublic = (type === 'public');
+
     // 🚨 Show Email Input ONLY for Private Events
-    if (type === 'private') {
-        document.getElementById('evContactGroup').style.display = 'block';
-    } else {
-        document.getElementById('evContactGroup').style.display = 'none';
-    }
-    
+    document.getElementById('evContactGroup').style.display = isPublic ? 'none' : 'block';
+    // 🚨 Description & Image ONLY for Public Shows
+    document.getElementById('evDescGroup').style.display = isPublic ? 'block' : 'none';
+    document.getElementById('evImageGroup').style.display = isPublic ? 'block' : 'none';
+
+    eventImageData = ''; // reset temp image holder
+
     if(id) {
         document.getElementById('eventModalTitle').textContent = 'Edit Show';
-        deleteBtn.style.display = 'block'; 
+        deleteBtn.style.display = 'block';
         const arr = type === 'public' ? APP.events : APP.requests;
         const item = arr.find(i => i.id == id);
         document.getElementById('evTitle').value = item.title || item.group || '';
@@ -1305,17 +1317,69 @@ function openEventModal(id, type) {
         document.getElementById('evSpots').value = item.spots || item.size || 0;
         document.getElementById('evMax').value = item.max || 100;
         document.getElementById('evContact').value = item.contact || '';
+        document.getElementById('evDesc').value = item.description || '';
+        if (item.image) {
+            eventImageData = item.image;
+            document.getElementById('evImagePreviewImg').src = item.image;
+            document.getElementById('evImagePreview').style.display = 'block';
+        } else {
+            document.getElementById('evImagePreview').style.display = 'none';
+        }
     } else {
         document.getElementById('eventModalTitle').textContent = 'Create New Show';
-        deleteBtn.style.display = 'none'; 
+        deleteBtn.style.display = 'none';
         document.getElementById('evTitle').value = '';
         document.getElementById('evDate').value = '';
         document.getElementById('evTime').value = '';
         document.getElementById('evLoc').value = '';
         document.getElementById('evSpots').value = '';
         document.getElementById('evContact').value = '';
+        document.getElementById('evDesc').value = '';
+        document.getElementById('evImagePreview').style.display = 'none';
     }
+    document.getElementById('evImage').value = '';
     document.getElementById('eventModal').classList.add('open');
+}
+
+// ============================================================================
+// EVENT IMAGE HANDLING (compressed base64 — no backend needed)
+// ============================================================================
+let eventImageData = '';
+
+function handleEventImage(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return showToast("Please choose an image file.", "error");
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            // Downscale to max 800px on the long edge — keeps the sheet small
+            const MAX = 800;
+            let w = img.width, h = img.height;
+            if (w > h && w > MAX) { h = h * MAX / w; w = MAX; }
+            else if (h >= w && h > MAX) { w = w * MAX / h; h = MAX; }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            eventImageData = canvas.toDataURL('image/jpeg', 0.75);
+
+            document.getElementById('evImagePreviewImg').src = eventImageData;
+            document.getElementById('evImagePreview').style.display = 'block';
+            showToast("Image attached.", "success");
+        };
+        img.onerror = function() { showToast("Could not read that image.", "error"); };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearEventImage() {
+    eventImageData = '';
+    document.getElementById('evImage').value = '';
+    document.getElementById('evImagePreview').style.display = 'none';
 }
 
 async function saveEvent() {
@@ -1328,6 +1392,7 @@ async function saveEvent() {
     const spots = parseInt(document.getElementById('evSpots').value) || 0;
     const max = parseInt(document.getElementById('evMax').value) || 100;
     const contact = sanitize(document.getElementById('evContact').value.trim());
+    const description = sanitize(document.getElementById('evDesc').value.trim());
 
     if(!title) return showToast("Title is required", "error");
     if(!date || !time) return showToast("Date and time are required", "error");
@@ -1337,14 +1402,14 @@ async function saveEvent() {
 
     if(id) {
         const item = arr.find(i => i.id == id);
-        if(type === 'public') { item.title = title; item.location = loc; item.spots = spots; item.max = max; } 
+        if(type === 'public') { item.title = title; item.location = loc; item.spots = spots; item.max = max; item.description = description; item.image = eventImageData || ''; }
         else { item.group = title; item.topics = loc; item.size = spots; item.contact = contact || 'No Email Provided'; }
         item.date = date; item.time = time;
        } else {
         const newId = Math.floor(Math.random() * 100000);
         const defaultAssignments = APP.users.map(u => ({ staffId: u.id, role: type === 'public' ? 'Staff' : '', status: type === 'public' ? 'accepted' : 'pending', respondedAt: '' }));
 
-        if(type === 'public') arr.push({id: newId, title, date, time, location:loc, max, spots, reserved:0, scanned:0, archived:false, assignments: defaultAssignments});
+        if(type === 'public') arr.push({id: newId, title, date, time, location:loc, max, spots, description, image: eventImageData || '', reserved:0, scanned:0, archived:false, assignments: defaultAssignments});
         else arr.push({id: newId, group:title, date, time, topics:loc, size:spots, contact: contact || 'No Email Provided', status:'approved', reserved:0, scanned:0, archived:false, assignments: defaultAssignments});
     }
     closeModal('eventModal'); renderCurrentPage(); 
