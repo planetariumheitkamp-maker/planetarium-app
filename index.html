@@ -703,7 +703,7 @@ function finishSplashTransition() {
             showScreen('worker');
         }, 400);
         startSyncIntervals();
-        setTimeout(() => backgroundSync(true), 500);
+        setTimeout(() => backgroundSync(true).then(() => autoArchivePastShows()), 500);
         return;
     }
     // ── END LOGIN DISABLED PATH ──────────────────────────────────────
@@ -737,7 +737,7 @@ function finishSplashTransition() {
             
             // Immediate background sync to fetch full data from cloud
             // This will merge in the full user data (including any cloud updates)
-            setTimeout(() => backgroundSync(true), 500);
+            setTimeout(() => backgroundSync(true).then(() => autoArchivePastShows()), 500);
             return; 
         } catch(e) {
             console.error("Session restore failed:", e);
@@ -937,6 +937,29 @@ function formatTime(timeStr) {
     return `${h12}:${m} ${ampm}`;
 }
 
+function isEventPast(ev) {
+    if (!ev.date) return false;
+    const d = new Date(String(ev.date).split('T')[0] + (ev.time ? 'T' + ev.time : 'T23:59:59'));
+    return d < new Date();
+}
+
+// Auto-archive any show whose date has passed (once per session).
+// Canceled shows are never touched — they stay archived by design.
+async function autoArchivePastShows() {
+    let changed = false;
+    APP.events.forEach(e => {
+        if (!e.archived && isEventPast(e)) { e.archived = true; changed = true; }
+    });
+    APP.requests.forEach(r => {
+        if (!r.archived && isEventPast(r)) { r.archived = true; changed = true; }
+    });
+    if (changed) {
+        console.log("Auto-archived past shows.");
+        renderCurrentPage();
+        await pushCloudData();
+    }
+}
+
 function formatEventDate(rawDate) {
     if(!rawDate) return 'TBD';
     const dateStr = String(rawDate).split('T')[0];
@@ -1027,6 +1050,7 @@ function renderCurrentPage() {
                 </div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     ${showReschedule ? `<button class="btn btn-small btn-outline" style="border-color:var(--warning); color:var(--warning);" onclick="rescheduleRequest(${item.id})">Reschedule</button>` : ''}
+                    ${isAdmin && currentDetailType === 'private' ? `<button class="btn btn-small btn-outline" style="border-color:var(--warning); color:var(--warning);" onclick="toggleRescheduling(${item.id})">${item.rescheduling ? '✓ Clear Rescheduling' : '⏳ Mark Rescheduling'}</button>` : ''}
                     ${isAdmin ? `<button class="btn btn-small btn-outline" onclick="openEventModal(${item.id}, '${currentDetailType}')">Edit Info</button>` : ''}
                     ${isAdmin ? `<button class="btn btn-small btn-outline" style="border-color:var(--muted-dark); color:var(--muted-dark);" onclick="archiveEvent(${item.id}, '${currentDetailType}')">📦 Archive</button>` : ''}
                 </div>
@@ -1082,9 +1106,16 @@ function renderCurrentPage() {
                     : `<div style="font-size:11px; font-weight:bold; color:var(--success);">🎫 ${spotsLeft} Left · ${reserved} Rsvd · ${scanned} In</div>`;
             }
 
+            const reschedBadge = (!isPublic && ev.rescheduling)
+                ? `<span class="badge" style="background:var(--warning); color:#000;">RESCHEDULING</span> `
+                : '';
+            const cardStyle = (!isPublic && ev.rescheduling)
+                ? 'border:2px solid var(--warning); background:rgba(255,165,2,0.08);' + (past ? ' opacity:0.55;' : '')
+                : (past ? 'opacity:0.55;' : '');
+
             return `
-            <div class="mobile-card clickable" onclick="openDetails(${ev.id}, '${ev.displayType}')" ${past ? 'style="opacity:0.55;"' : ''}>
-                <div class="card-header"><div class="card-title">${title}</div>${badge}</div>
+            <div class="mobile-card clickable" onclick="openDetails(${ev.id}, '${ev.displayType}')" style="${cardStyle}">
+                <div class="card-header"><div class="card-title">${title}</div><div style="display:flex; gap:6px; flex-shrink:0;">${reschedBadge}${badge}</div></div>
                 <div class="card-detail"><span>📅</span> ${formatEventDate(ev.date)} @ ${formatTime(ev.time)}</div>
                 <div class="card-detail"><span>📍</span> ${locOrTopic}</div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
@@ -1422,9 +1453,41 @@ async function deleteEvent() {
     const id = document.getElementById('evId').value;
     const type = document.getElementById('evType').value;
     if(!id) return;
-    if(!confirm("Are you sure you want to completely delete this show? This cannot be undone.")) return;
-    if(type === 'public') { APP.events = APP.events.filter(e => e.id != id); } else { APP.requests = APP.requests.filter(r => r.id != id); }
-    closeModal('eventModal'); showToast("Show deleted successfully.", "success"); wNav('events'); 
+    if(!confirm("Cancel this show? It will be archived and highlighted red in the Archive as CANCELED.")) return;
+
+    const arr = type === 'public' ? APP.events : APP.requests;
+    const item = arr.find(i => i.id == id);
+    if (item) {
+        item.canceled = true;      // red highlight in the archive
+        item.archived = true;      // hidden from schedule, appears in archive
+    }
+    closeModal('eventModal'); showToast("Show canceled and moved to archive.", "success"); wNav('events');
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+// Permanently erase a show from the database (no archive entry).
+function hardDeleteEvent(id, type) {
+    if(!confirm("Permanently delete this show from the database? This cannot be undone.")) return;
+    if(type === 'public') { APP.events = APP.events.filter(e => e.id != id); }
+    else { APP.requests = APP.requests.filter(r => r.id != id); }
+    showToast("Show permanently deleted.", "success");
+    if (document.getElementById('archiveModal').classList.contains('open')) renderArchiveList();
+    renderCurrentPage();
+    document.getElementById('cloud-syncing').classList.add('active');
+    pushCloudData().then(() => document.getElementById('cloud-syncing').classList.remove('active'));
+}
+
+// ============================================================================
+// RESCHEDULING STATE (private shows)
+// ============================================================================
+async function toggleRescheduling(id) {
+    const req = APP.requests.find(r => r.id == id);
+    if(!req) return;
+    req.rescheduling = !req.rescheduling;
+    showToast(req.rescheduling ? "Marked as rescheduling — highlighted yellow." : "Rescheduling cleared.", "success");
+    renderCurrentPage();
     document.getElementById('cloud-syncing').classList.add('active');
     await pushCloudData();
     document.getElementById('cloud-syncing').classList.remove('active');
@@ -1451,6 +1514,7 @@ async function unarchiveEvent(id, type) {
     const ev = arr.find(e => e.id == id);
     if(!ev) return;
     ev.archived = false;
+    ev.canceled = false;
     showToast("Show restored to schedule.", "success");
     renderCurrentPage();
     // If the archive browser is open, refresh it in place
@@ -1481,14 +1545,16 @@ function renderArchiveList() {
     list.innerHTML = archivedShows.map(ev => {
         const isPublic = ev._type === 'public';
         const badge = isPublic ? `<span class="badge badge-public">PUBLIC</span>` : `<span class="badge badge-private">PRIVATE</span>`;
+        const canceledBadge = ev.canceled ? `<span class="badge" style="background:var(--danger); color:#fff;">CANCELED</span>` : '';
         const title = ev.title || ev.group;
         const locOrTopic = ev.location || ev.topics;
         const reserved = ev.reserved || 0;
         const scanned = ev.scanned || 0;
+        const cardStyle = ev.canceled ? 'border-top:4px solid var(--danger); background:rgba(255,71,87,0.06);' : 'border-top:4px solid var(--muted-dark);';
 
         return `
-        <div class="mobile-card" style="border-top:4px solid var(--muted-dark);">
-            <div class="card-header"><div class="card-title">${title}</div>${badge}</div>
+        <div class="mobile-card" style="${cardStyle}">
+            <div class="card-header"><div class="card-title">${title}</div><div style="display:flex; gap:6px; flex-shrink:0;">${canceledBadge}${badge}</div></div>
             <div class="card-detail"><span>📅</span> ${formatEventDate(ev.date)} @ ${formatTime(ev.time)}</div>
             <div class="card-detail"><span>📍</span> ${locOrTopic}</div>
             ${isPublic ? `
@@ -1497,7 +1563,11 @@ function renderArchiveList() {
             <div class="card-detail"><span>🪑</span> Capacity: ${ev.max || 'N/A'}</div>` : `
             <div class="card-detail"><span>👥</span> Group Size: ${ev.size || ev.spots || 'N/A'}</div>
             <div class="card-detail"><span>👤</span> Contact: ${ev.contact || ev.email || 'No Email Provided'}</div>`}
-            ${isAdmin ? `<button class="btn btn-primary" style="margin-top:14px;" onclick="unarchiveEvent(${ev.id}, '${ev._type}')">↩️ Restore to Schedule</button>` : ''}
+            ${isAdmin ? `
+            <div style="display:flex; gap:10px; margin-top:14px;">
+                <button class="btn btn-primary" style="flex:1.5;" onclick="unarchiveEvent(${ev.id}, '${ev._type}')">↩️ Restore</button>
+                <button class="btn btn-outline" style="flex:1; border-color:var(--danger); color:var(--danger);" onclick="hardDeleteEvent(${ev.id}, '${ev._type}')">🗑 Delete</button>
+            </div>` : ''}
         </div>`;
     }).join('');
 }
