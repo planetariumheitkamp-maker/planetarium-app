@@ -1045,8 +1045,8 @@ function renderCurrentPage() {
         <div class="wpage active">
             <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <div style="display:flex; align-items:center; gap:12px;">
-                    <div class="back-btn" onclick="wNav('events')" style="font-size:24px; cursor:pointer;">←</div>
-                    <h2 style="font-size:18px;">Details</h2>
+                    <div class="back-btn" onclick="wNav('events')" style="font-size:24px; cursor:pointer; color:var(--muted-light);">←</div>
+                    <h2 style="font-size:18px; color:var(--muted-light);">Details</h2>
                 </div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     ${showReschedule ? `<button class="btn btn-small btn-outline" style="border-color:var(--warning); color:var(--warning);" onclick="rescheduleRequest(${item.id})">Reschedule</button>` : ''}
@@ -1193,7 +1193,7 @@ function renderCurrentPage() {
         main.innerHTML = `<div class="wpage active">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h2 style="color:var(--text-dark);">Timeclock</h2>
-                <button class="btn btn-small btn-outline" style="border-width:1px;" onclick="openManualTimeModal()">+ Manual Entry</button>
+                <button class="btn btn-small btn-outline" style="border-width:1px; width:auto; padding:6px 10px; font-size:11px;" onclick="openManualTimeModal()">+ Manual Entry</button>
             </div>
             
             <div class="mobile-card">
@@ -1280,18 +1280,6 @@ function renderCurrentPage() {
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-weight:600; font-size:14px; color:var(--text-dark);">Dark Mode</span>
                     <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" ${isDark ? 'checked' : ''} onchange="toggleDarkMode(this.checked)">
-                </div>
-            </div>
-
-            <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-top:24px; margin-bottom:12px;">App Preferences</h3>
-            <div class="mobile-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border-light); padding-bottom:16px;">
-                    <span style="font-weight:600; font-size:14px; color:var(--text-dark);">Enable Time Notifications</span>
-                    <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" ${APP.settings.notifsEnabled ? 'checked' : ''} onchange="toggleSetting('notifsEnabled', this.checked)">
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-weight:600; font-size:14px; color:var(--text-dark);">Pause During Shows</span>
-                    <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" ${APP.settings.pauseShows ? 'checked' : ''} onchange="toggleSetting('pauseShows', this.checked)">
                 </div>
             </div>
 
