@@ -54,10 +54,20 @@
     .front-tag { text-align:center; color:#a996cc; font-size:13px; margin:26px 0 18px; letter-spacing:1px; }
 
     /* Event Cards */
-    .show-card { background:rgba(43, 29, 82, 0.6); border:1px solid rgba(209, 184, 136, 0.2); border-radius:16px; padding:20px; margin-bottom:16px; backdrop-filter:blur(10px); transition:transform 0.2s; position:relative; overflow:hidden;}
+    .show-card { background:rgba(43, 29, 82, 0.6); border:1px solid rgba(209, 184, 136, 0.2); border-radius:16px; padding:20px; margin-bottom:16px; backdrop-filter:blur(10px); transition:transform 0.2s, border-color 0.2s; position:relative; overflow:hidden; cursor:pointer;}
+    .show-card:hover { border-color:rgba(209, 184, 136, 0.55); }
     .show-card:active { transform:scale(0.98); }
     .show-title { font-size:20px; font-weight:700; color:#fff; margin-bottom:8px; padding-right:60px;}
     .show-details { color:#b0a3c9; font-size:14px; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
+    .show-thumb { width:100%; height:150px; object-fit:cover; border-radius:10px; margin-bottom:14px; display:block; border:1px solid rgba(209,184,136,0.25);}
+    .show-tap { color:#6b5d8a; font-size:11px; margin-top:10px; letter-spacing:1px; text-transform:uppercase;}
+
+    /* Show detail page */
+    .show-hero { width:100%; max-height:300px; object-fit:cover; border-radius:16px; border:1px solid rgba(209,184,136,0.3); margin-bottom:20px; display:block;}
+    .show-desc-text { color:#d9d0ec; font-size:15px; line-height:1.8; margin:18px 0; white-space:pre-wrap; }
+    .detail-meta { background:rgba(43,29,82,0.5); border:1px solid rgba(209,184,136,0.2); border-radius:14px; padding:16px 18px; margin:18px 0;}
+    .detail-meta .show-details { margin-bottom:8px; }
+    .detail-meta .show-details:last-child { margin-bottom:0; }
 
     .capacity-badge { position:absolute; top:20px; right:20px; background:rgba(209, 184, 136, 0.1); color:#D1B888; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:700; border:1px solid rgba(209, 184, 136, 0.3);}
     .capacity-badge.sold-out { background:rgba(255, 71, 87, 0.1); color:#ff4757; border-color:rgba(255, 71, 87, 0.3);}
@@ -171,6 +181,12 @@
         <button class="back-link" onclick="goFront()">← All options</button>
         <h2 style="font-size:18px; margin-bottom:20px; color:#D1B888; font-family:'Orbitron', monospace;">UPCOMING SHOWS</h2>
         <div id="shows-list"></div>
+    </div>
+
+    <!-- SHOW DETAIL -->
+    <div id="showdetail" class="view">
+        <button class="back-link" onclick="goView('storefront')">← All shows</button>
+        <div id="showdetail-body"></div>
     </div>
 
     <!-- PRIVATE BOOKING -->
@@ -313,6 +329,14 @@ function isUpcoming(ev) {
     const d = new Date(String(ev.date).split('T')[0] + (ev.time ? 'T' + ev.time : 'T23:59:59'));
     const now = new Date();
     return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function seatsAvailable(show) {
+    let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
+    const deviceReserved = localBookings[show.id] || 0;
+    return Math.max(0, (show.max || 0) - (show.reserved || 0) - (show.scanned || 0) - deviceReserved);
 }
 
 /* ---------------- stars ---------------- */
@@ -490,7 +514,7 @@ function dismissSplash() {
 function goView(id) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById(id).classList.add('active');
-    const subs = { front: 'Public Box Office', storefront: 'Public Box Office & Ticketing', booking: 'Private Group Requests', 'ticket-view': 'Your Tickets' };
+    const subs = { front: 'Public Box Office', storefront: 'Public Box Office & Ticketing', showdetail: 'Show Details', booking: 'Private Group Requests', 'ticket-view': 'Your Tickets' };
     document.getElementById('header-sub').textContent = subs[id] || 'Public Box Office';
     window.scrollTo(0, 0);
 }
@@ -518,28 +542,58 @@ function renderShows() {
         return;
     }
 
-    let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
-
     list.innerHTML = publicShows.map(show => {
-        const deviceReserved = localBookings[show.id] || 0;
-        const available = Math.max(0, show.max - (show.reserved || 0) - (show.scanned || 0) - deviceReserved);
+        const available = seatsAvailable(show);
 
         let badgeHTML = `<div class="capacity-badge">${available} Seats Left</div>`;
         if (available <= 0) badgeHTML = `<div class="capacity-badge sold-out">SOLD OUT</div>`;
 
         return `
-        <div class="show-card">
+        <div class="show-card" onclick="openShowDetail('${show.id}')">
             ${badgeHTML}
-            <div class="show-title">${show.title}</div>
+            ${show.image ? `<img class="show-thumb" src="${show.image}" alt="${esc(show.title)}" loading="lazy">` : ''}
+            <div class="show-title">${esc(show.title)}</div>
             <div class="show-details">📅 ${formatEventDate(show.date)}</div>
             <div class="show-details">🕒 ${formatTime(show.time)}</div>
-            <div class="show-details">📍 ${show.location || 'Main Dome'}</div>
-
-            ${available > 0
-                ? `<button class="btn btn-small" style="margin-top:20px;" onclick="openBooking('${show.id}', ${available})">Reserve Tickets</button>`
-                : `<button class="btn btn-small btn-outline" style="margin-top:20px; opacity:0.5; cursor:not-allowed;" disabled>Sold Out</button>`}
+            <div class="show-details">📍 ${esc(show.location || 'Main Dome')}</div>
+            <div class="show-tap">Tap for details & tickets →</div>
         </div>`;
     }).join('');
+}
+
+/* ---------------- show detail page ---------------- */
+function openShowDetail(id) {
+    const show = publicShows.find(s => s.id == id);
+    if(!show) return;
+
+    const available = seatsAvailable(show);
+    const soldOut = available <= 0;
+
+    document.getElementById('showdetail-body').innerHTML = `
+        ${show.image ? `<img class="show-hero" src="${show.image}" alt="${esc(show.title)}">` : ''}
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+            <h2 style="font-size:24px; font-weight:700; color:#fff; line-height:1.25;">${esc(show.title)}</h2>
+            ${soldOut
+                ? `<div class="capacity-badge sold-out" style="position:static; flex-shrink:0;">SOLD OUT</div>`
+                : `<div class="capacity-badge" style="position:static; flex-shrink:0;">${available} Left</div>`}
+        </div>
+
+        <div class="detail-meta">
+            <div class="show-details">📅 ${formatEventDate(show.date)}</div>
+            <div class="show-details">🕒 ${formatTime(show.time)}</div>
+            <div class="show-details">📍 ${esc(show.location || 'Main Dome')}</div>
+            <div class="show-details">🪑 ${show.max || 'N/A'} seat capacity</div>
+        </div>
+
+        ${show.description
+            ? `<div class="show-desc-text">${esc(show.description)}</div>`
+            : `<p style="color:#a996cc; font-size:14px; line-height:1.7; margin:18px 0;">Join us under the dome for this presentation at the Heitkamp Planetarium.</p>`}
+
+        ${soldOut
+            ? `<button class="btn btn-outline" style="opacity:0.5; cursor:not-allowed;" disabled>Sold Out</button>`
+            : `<button class="btn" onclick="openBooking('${show.id}', ${available})">Reserve Tickets</button>`}
+    `;
+    goView('showdetail');
 }
 
 /* ---------------- seat reservation ---------------- */
@@ -734,9 +788,9 @@ function renderTicketWallet() {
 
                 <div class="qr-container" id="qr-code-${index}"></div>
 
-                <h3 style="font-size:22px; font-weight:700; margin-bottom:8px; line-height:1.2;">${title}</h3>
+                <h3 style="font-size:22px; font-weight:700; margin-bottom:8px; line-height:1.2;">${esc(title)}</h3>
                 <p style="color:#442D7D; font-weight:700; font-size:15px;">${formatEventDate(date)}${time ? ' @ ' + formatTime(time) : ''}</p>
-                <p style="color:#888; font-size:13px; margin-top:20px; background:#f4f4f4; padding:10px; border-radius:8px;">Reserved under: <span style="font-weight:700; color:#111;">${name}</span></p>
+                <p style="color:#888; font-size:13px; margin-top:20px; background:#f4f4f4; padding:10px; border-radius:8px;">Reserved under: <span style="font-weight:700; color:#111;">${esc(name)}</span></p>
             </div>
         </div>`;
     });
