@@ -361,8 +361,8 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 // 🔴 IMPORTANT: Paste the Web App URL from Phase 1 Step 2 here:
 const API_URL = "https://script.google.com/macros/s/AKfycbz55rmtgwmQwJlZWKQYx2LoFoBmBXUFAUeqKhJR3xLcmvV5UsSou8-IP5ciucVfK-Yx7Q/exec"; 
 const SYNC_INTERVAL_MS = 10000;
-// 🔑 LOGIN TOGGLE — set to true to re-enable the login screen (currently bypassed).
-const LOGIN_ENABLED = false;
+// 🔑 LOGIN TOGGLE — set to false to bypass the login screen.
+const LOGIN_ENABLED = true;
 let APP = {
     events: [],
     requests: [],
@@ -884,7 +884,12 @@ function showScreen(id) {
 }
 
 function doLogout() {
-    if (!LOGIN_ENABLED) return showToast("Login is currently disabled.", "error");
+    if (!LOGIN_ENABLED) {
+        // Login bypassed: "log out" just clears the session and restarts at the splash.
+        localStorage.removeItem('planetarium_user');
+        location.reload();
+        return;
+    }
     APP.currentUser = null;
     localStorage.removeItem('planetarium_user'); 
     document.body.classList.remove('dark-mode'); 
@@ -1297,10 +1302,9 @@ function renderCurrentPage() {
                 <div style="font-size:20px; color:var(--muted-dark);">→</div>
             </div>
 
-            ${LOGIN_ENABLED ? `
             <div style="margin-top:40px;">
                 <button class="btn btn-primary" style="background:var(--danger); color:#fff; font-size:16px; padding:16px;" onclick="doLogout()">🔒 Log Out</button>
-            </div>` : ''}
+            </div>
         </div>`;
     }
 }
