@@ -219,7 +219,9 @@
             <div class="form-group"><label>Contact Person</label><input type="text" id="contactName" placeholder="First and last name"></div>
             <div class="form-group"><label>Email Address</label><input type="email" id="contactEmail" placeholder="email@example.com"></div>
             <div class="form-group"><label>Estimated Number of Attendees</label><input type="number" id="groupSize" placeholder="e.g. 45"></div>
-            <div class="form-group"><label>What topics are you interested in?</label><textarea id="topics" placeholder="e.g. Solar System, Constellations, Space Exploration..."></textarea></div>
+            <div class="form-group"><label>What topics are you interested in?</label><textarea id="topics" placeholder="e.g. Solar System, Constellations... "></textarea>
+            <textarea id="topics" placeholder="Or if there is no preference put N/A"></textarea>
+            </div>
             <div style="display:flex; gap:12px;">
                 <button class="btn btn-ghost" style="flex:1;" onclick="prevStep(2)">← Back</button>
                 <button class="btn" style="flex:1.5;" id="submitBtn" onclick="submitGroupRequest()">Submit Request</button>
