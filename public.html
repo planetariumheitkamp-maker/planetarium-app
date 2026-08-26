@@ -93,6 +93,16 @@
     .form-group input, .form-group textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:14px; border-radius:10px; font-size:16px; outline:none; font-family:'Outfit', sans-serif;}
     .form-group input:focus, .form-group textarea:focus { border-color:#D1B888; }
     .form-group textarea { resize:vertical; min-height:90px; }
+       /* Time slot picker */
+    .slot-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:8px; }
+    .slot { padding:12px 6px; border-radius:10px; border:1px solid rgba(209,184,136,0.4); background:rgba(255,255,255,0.05); color:#fff; font-family:'Outfit',sans-serif; font-size:13px; font-weight:600; text-align:center; cursor:pointer; transition:all 0.2s ease; }
+    .slot:hover:not(.taken):not(.selected) { border-color:#D1B888; background:rgba(209,184,136,0.15); }
+    .slot.selected { background:#D1B888; color:#0a0514; border-color:#D1B888; }
+    .slot.taken { background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.12); color:rgba(255,255,255,0.25); cursor:not-allowed; text-decoration:line-through; }
+    .slot-hint { color:#a996cc; font-size:13px; margin:0; grid-column:1 / -1; }
+    .slot-legend { display:flex; gap:16px; margin-top:10px; font-size:11px; color:#a996cc; }
+    .slot-legend span { display:flex; align-items:center; gap:6px; }
+    .slot-dot { width:10px; height:10px; border-radius:3px; display:inline-block; }
     .form-error { display:none; background:rgba(255,71,87,0.12); border:1px solid #ff4757; color:#ff8f94; font-size:13px; padding:11px 13px; border-radius:10px; margin-bottom:16px; }
     .form-error.show { display:block; }
 
@@ -204,8 +214,16 @@
                 ⏱️ <strong>Duration</strong> — Standard shows run 45 minutes with Q&A afterwords<br>
                 🎓 <strong>Customizable</strong> — Topics tailored to your group's interests
             </div>
-            <div class="form-group"><label>Preferred Date</label><input type="date" id="bookDate"></div>
-            <div class="form-group"><label>Preferred Time</label><input type="time" id="bookTime"></div>
+            <div class="form-group"><label>Preferred Date</label><input type="date" id="bookDate" onchange="onBookingDateChange()"></div>
+            <div class="form-group">
+                <label>Preferred Time (1-hour blocks)</label>
+                <input type="hidden" id="bookTime">
+                <div id="slot-grid" class="slot-grid"><p class="slot-hint">Pick a date above to see available times.</p></div>
+                <div class="slot-legend" id="slot-legend" style="display:none;">
+                    <span><i class="slot-dot" style="background:rgba(209,184,136,0.4);"></i> Available</span>
+                    <span><i class="slot-dot" style="background:rgba(255,255,255,0.15);"></i> Already booked</span>
+                </div>
+            </div>
             <button class="btn" onclick="nextStep(1)">Next: Group Details →</button>
         </div>
 
@@ -299,6 +317,8 @@ const REFRESH_MS = 30000;
 // ==========================================
 
 let publicShows = [];
+let allEvents = [];
+let privateRequests = [];
 let ticketDataGlobal = {};
 let currentTicketIndex = 0;
 let slidesCount = 1;
@@ -522,15 +542,94 @@ function goView(id) {
 function goFront() { goView('front'); }
 function goHome() { window.location.href = window.location.pathname; }
 
+/* ---------------- private booking time slots ---------------- */
+// 1-hour booking blocks. First slot starts at SLOT_START_HOUR, last slot ends at SLOT_END_HOUR.
+const SLOT_START_HOUR = 8;    // 8:00 AM
+const SLOT_END_HOUR   = 21;   // 9:00 PM
+const SLOT_LEN_MIN    = 60;
+
+function minutesOf(t) {
+    if (!t) return null;
+    let s = String(t);
+    if (s.includes('T')) s = s.split('T')[1] || '';
+    s = s.replace('Z', '').trim();
+    const parts = s.split(':');
+    const h = parseInt(parts[0]), m = parseInt(parts[1]);
+    if (isNaN(h)) return null;
+    return h * 60 + (isNaN(m) ? 0 : m);
+}
+
+// Existing commitments on the chosen date: pending/approved private requests + public shows.
+function slotBlocksFor(dateStr) {
+    const blocks = [];
+    if (!dateStr) return blocks;
+    (privateRequests || []).forEach(r => {
+        if (r.archived) return;
+        const st = String(r.status || 'pending').toLowerCase();
+        if (st === 'declined' || st === 'cancelled' || st === 'canceled') return;
+        if (String(r.date).split('T')[0] !== dateStr) return;
+        const start = minutesOf(r.time);
+        if (start === null) return;
+        blocks.push({ start, end: start + SLOT_LEN_MIN, reason: 'A private show is already requested at this time' });
+    });
+    (allEvents || []).forEach(e => {
+        if (e.archived) return;
+        if (String(e.date).split('T')[0] !== dateStr) return;
+        const start = minutesOf(e.time);
+        if (start === null) return;
+        blocks.push({ start, end: start + SLOT_LEN_MIN, reason: `Public show scheduled: ${e.title || 'Planetarium Show'}` });
+    });
+    return blocks;
+}
+
+function renderTimeSlots() {
+    const grid = document.getElementById('slot-grid');
+    if (!grid) return;
+    const hidden = document.getElementById('bookTime');
+    const dateStr = document.getElementById('bookDate').value;
+    if (!dateStr) {
+        hidden.value = '';
+        grid.innerHTML = '<p class="slot-hint">Pick a date above to see available times.</p>';
+        document.getElementById('slot-legend').style.display = 'none';
+        return;
+    }
+    const blocks = slotBlocksFor(dateStr);
+    let html = '';
+    for (let h = SLOT_START_HOUR; h + SLOT_LEN_MIN / 60 <= SLOT_END_HOUR; h++) {
+        const start = h * 60, end = start + SLOT_LEN_MIN;
+        const hit = blocks.find(b => start < b.end && b.start < end);
+        const hh = String(h).padStart(2, '0') + ':00';
+        const label = formatTime(hh);
+        if (hit) html += `<button type="button" class="slot taken" disabled title="${esc(hit.reason)}">${label}</button>`;
+        else html += `<button type="button" class="slot ${hidden.value === hh ? 'selected' : ''}" onclick="pickSlot(this, ${h})">${label}</button>`;
+    }
+    grid.innerHTML = html;
+    document.getElementById('slot-legend').style.display = 'flex';
+}
+
+function pickSlot(el, hour) {
+    document.getElementById('bookTime').value = String(hour).padStart(2, '0') + ':00';
+    document.querySelectorAll('#slot-grid .slot').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+}
+
+function onBookingDateChange() {
+    document.getElementById('bookTime').value = '';
+    renderTimeSlots();
+}
+
 /* ---------------- storefront ---------------- */
 async function fetchShows() {
     try {
-        const res = await fetch(API_URL);
+                const res = await fetch(API_URL);
         const data = await res.json();
-        publicShows = (data.events || [])
+        allEvents = data.events || [];
+        privateRequests = data.requests || [];
+        publicShows = allEvents
             .filter(e => !e.archived && isUpcoming(e))
             .sort((a,b) => new Date(a.date) - new Date(b.date));
         renderShows();
+        renderTimeSlots();
     } catch(err) {
         document.getElementById('shows-list').innerHTML = "<p style='text-align:center; color:#ff4757;'>Unable to load schedule. Check your connection and pull to refresh.</p>";
     }
@@ -679,7 +778,7 @@ async function submitBooking() {
 function nextStep(current) {
     if(current === 1) {
         if(!document.getElementById('bookDate').value || !document.getElementById('bookTime').value) {
-            alert("Please select a date and time.");
+            alert("Please select a date and an available time slot.");
             return;
         }
     }
@@ -732,10 +831,14 @@ async function submitGroupRequest() {
         const result = await response.json();
         if(!result.success) throw new Error(result.message || "Unknown error");
 
-        document.getElementById('step2').classList.remove('active');
+                document.getElementById('step2').classList.remove('active');
         document.getElementById('confirmEmail').textContent = email;
         document.getElementById('step3').classList.add('active');
         window.scrollTo(0, 0);
+
+        // Block this slot locally right away so it shows as taken before the next refresh
+        privateRequests.push({ id: payload.id, date, time, status: 'pending' });
+        renderTimeSlots();
     } catch(err) {
         fail("There was an error submitting your request: " + err.message);
     } finally {
