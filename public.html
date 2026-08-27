@@ -93,8 +93,8 @@
     .form-group input, .form-group textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:14px; border-radius:10px; font-size:16px; outline:none; font-family:'Outfit', sans-serif;}
     .form-group input:focus, .form-group textarea:focus { border-color:#D1B888; }
     .form-group textarea { resize:vertical; min-height:90px; }
-       /* Time slot picker */
-    .slot-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:8px; }
+    /* Time slot picker */
+    .slot-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:8px; }
     .slot { padding:12px 6px; border-radius:10px; border:1px solid rgba(209,184,136,0.4); background:rgba(255,255,255,0.05); color:#fff; font-family:'Outfit',sans-serif; font-size:13px; font-weight:600; text-align:center; cursor:pointer; transition:all 0.2s ease; }
     .slot:hover:not(.taken):not(.selected) { border-color:#D1B888; background:rgba(209,184,136,0.15); }
     .slot.selected { background:#D1B888; color:#0a0514; border-color:#D1B888; }
@@ -136,6 +136,7 @@
     .loader { border:4px solid rgba(209, 184, 136, 0.2); border-top:4px solid #D1B888; border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; margin:40px auto; }
     @keyframes spin { 0% { transform:rotate(0deg);} 100% { transform:rotate(360deg);} }
 </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -543,10 +544,11 @@ function goFront() { goView('front'); }
 function goHome() { window.location.href = window.location.pathname; }
 
 /* ---------------- private booking time slots ---------------- */
-// 1-hour booking blocks. First slot starts at SLOT_START_HOUR, last slot ends at SLOT_END_HOUR.
-const SLOT_START_HOUR = 8;    // 8:00 AM
-const SLOT_END_HOUR   = 21;   // 9:00 PM
-const SLOT_LEN_MIN    = 60;
+// Slots are offered every SLOT_STEP_MIN minutes, but each booking reserves a full SLOT_LEN_MIN window.
+const SLOT_START_HOUR = 8;    // first slot starts at 8:00 AM
+const SLOT_END_HOUR   = 21;   // last booking ends by 9:00 PM
+const SLOT_LEN_MIN    = 60;   // every booking blocks out a full hour
+const SLOT_STEP_MIN   = 15;   // slots offered at :00, :15, :30, :45
 
 function minutesOf(t) {
     if (!t) return null;
@@ -557,6 +559,10 @@ function minutesOf(t) {
     const h = parseInt(parts[0]), m = parseInt(parts[1]);
     if (isNaN(h)) return null;
     return h * 60 + (isNaN(m) ? 0 : m);
+}
+
+function timeStrOf(mins) {
+    return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
 }
 
 // Existing commitments on the chosen date: pending/approved private requests + public shows.
@@ -595,20 +601,20 @@ function renderTimeSlots() {
     }
     const blocks = slotBlocksFor(dateStr);
     let html = '';
-    for (let h = SLOT_START_HOUR; h + SLOT_LEN_MIN / 60 <= SLOT_END_HOUR; h++) {
-        const start = h * 60, end = start + SLOT_LEN_MIN;
+    for (let m = SLOT_START_HOUR * 60; m + SLOT_LEN_MIN <= SLOT_END_HOUR * 60; m += SLOT_STEP_MIN) {
+        const start = m, end = m + SLOT_LEN_MIN;
         const hit = blocks.find(b => start < b.end && b.start < end);
-        const hh = String(h).padStart(2, '0') + ':00';
+        const hh = timeStrOf(m);
         const label = formatTime(hh);
         if (hit) html += `<button type="button" class="slot taken" disabled title="${esc(hit.reason)}">${label}</button>`;
-        else html += `<button type="button" class="slot ${hidden.value === hh ? 'selected' : ''}" onclick="pickSlot(this, ${h})">${label}</button>`;
+        else html += `<button type="button" class="slot ${hidden.value === hh ? 'selected' : ''}" onclick="pickSlot(this, ${m})">${label}</button>`;
     }
     grid.innerHTML = html;
     document.getElementById('slot-legend').style.display = 'flex';
 }
 
-function pickSlot(el, hour) {
-    document.getElementById('bookTime').value = String(hour).padStart(2, '0') + ':00';
+function pickSlot(el, mins) {
+    document.getElementById('bookTime').value = timeStrOf(mins);
     document.querySelectorAll('#slot-grid .slot').forEach(s => s.classList.remove('selected'));
     el.classList.add('selected');
 }
@@ -621,7 +627,7 @@ function onBookingDateChange() {
 /* ---------------- storefront ---------------- */
 async function fetchShows() {
     try {
-                const res = await fetch(API_URL);
+        const res = await fetch(API_URL);
         const data = await res.json();
         allEvents = data.events || [];
         privateRequests = data.requests || [];
@@ -831,7 +837,7 @@ async function submitGroupRequest() {
         const result = await response.json();
         if(!result.success) throw new Error(result.message || "Unknown error");
 
-                document.getElementById('step2').classList.remove('active');
+        document.getElementById('step2').classList.remove('active');
         document.getElementById('confirmEmail').textContent = email;
         document.getElementById('step3').classList.add('active');
         window.scrollTo(0, 0);
