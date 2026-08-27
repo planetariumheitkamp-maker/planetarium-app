@@ -93,16 +93,12 @@
     .form-group input, .form-group textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:14px; border-radius:10px; font-size:16px; outline:none; font-family:'Outfit', sans-serif;}
     .form-group input:focus, .form-group textarea:focus { border-color:#D1B888; }
     .form-group textarea { resize:vertical; min-height:90px; }
-    /* Time slot picker */
-    .slot-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:8px; }
-    .slot { padding:12px 6px; border-radius:10px; border:1px solid rgba(209,184,136,0.4); background:rgba(255,255,255,0.05); color:#fff; font-family:'Outfit',sans-serif; font-size:13px; font-weight:600; text-align:center; cursor:pointer; transition:all 0.2s ease; }
-    .slot:hover:not(.taken):not(.selected) { border-color:#D1B888; background:rgba(209,184,136,0.15); }
-    .slot.selected { background:#D1B888; color:#0a0514; border-color:#D1B888; }
-    .slot.taken { background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.12); color:rgba(255,255,255,0.25); cursor:not-allowed; text-decoration:line-through; }
-    .slot-hint { color:#a996cc; font-size:13px; margin:0; grid-column:1 / -1; }
-    .slot-legend { display:flex; gap:16px; margin-top:10px; font-size:11px; color:#a996cc; }
-    .slot-legend span { display:flex; align-items:center; gap:6px; }
-    .slot-dot { width:10px; height:10px; border-radius:3px; display:inline-block; }
+    /* Time slot dropdown */
+    .slot-select { width:100%; background:rgba(255,255,255,0.05) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23D1B888' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 14px center; border:1px solid rgba(255,255,255,0.1); color:#fff; padding:14px; padding-right:38px; border-radius:10px; font-size:16px; outline:none; font-family:'Outfit', sans-serif; appearance:none; -webkit-appearance:none; cursor:pointer; }
+    .slot-select:focus { border-color:#D1B888; }
+    .slot-select:disabled { opacity:0.5; cursor:not-allowed; }
+    .slot-select option { background:#1e1e24; color:#fff; }
+    .slot-select option:disabled { color:rgba(255,255,255,0.3); }
     .form-error { display:none; background:rgba(255,71,87,0.12); border:1px solid #ff4757; color:#ff8f94; font-size:13px; padding:11px 13px; border-radius:10px; margin-bottom:16px; }
     .form-error.show { display:block; }
 
@@ -217,13 +213,10 @@
             </div>
             <div class="form-group"><label>Preferred Date</label><input type="date" id="bookDate" onchange="onBookingDateChange()"></div>
             <div class="form-group">
-                <label>Preferred Time (1-hour blocks)</label>
-                <input type="hidden" id="bookTime">
-                <div id="slot-grid" class="slot-grid"><p class="slot-hint">Pick a date above to see available times.</p></div>
-                <div class="slot-legend" id="slot-legend" style="display:none;">
-                    <span><i class="slot-dot" style="background:rgba(209,184,136,0.4);"></i> Available</span>
-                    <span><i class="slot-dot" style="background:rgba(255,255,255,0.15);"></i> Already booked</span>
-                </div>
+                <label>Preferred Time (each booking reserves 1 hour)</label>
+                <select id="bookTime" class="slot-select" disabled>
+                    <option value="">Pick a date above to see available times…</option>
+                </select>
             </div>
             <button class="btn" onclick="nextStep(1)">Next: Group Details →</button>
         </div>
@@ -589,38 +582,31 @@ function slotBlocksFor(dateStr) {
 }
 
 function renderTimeSlots() {
-    const grid = document.getElementById('slot-grid');
-    if (!grid) return;
-    const hidden = document.getElementById('bookTime');
+    const sel = document.getElementById('bookTime');
+    if (!sel) return;
+    const prev = sel.value;
     const dateStr = document.getElementById('bookDate').value;
     if (!dateStr) {
-        hidden.value = '';
-        grid.innerHTML = '<p class="slot-hint">Pick a date above to see available times.</p>';
-        document.getElementById('slot-legend').style.display = 'none';
+        sel.innerHTML = '<option value="">Pick a date above to see available times…</option>';
+        sel.disabled = true;
         return;
     }
     const blocks = slotBlocksFor(dateStr);
-    let html = '';
+    let html = '<option value="">Select a time…</option>';
     for (let m = SLOT_START_HOUR * 60; m + SLOT_LEN_MIN <= SLOT_END_HOUR * 60; m += SLOT_STEP_MIN) {
-        const start = m, end = m + SLOT_LEN_MIN;
-        const hit = blocks.find(b => start < b.end && b.start < end);
         const hh = timeStrOf(m);
-        const label = formatTime(hh);
-        if (hit) html += `<button type="button" class="slot taken" disabled title="${esc(hit.reason)}">${label}</button>`;
-        else html += `<button type="button" class="slot ${hidden.value === hh ? 'selected' : ''}" onclick="pickSlot(this, ${m})">${label}</button>`;
+        const hit = blocks.find(b => m < b.end && b.start < m + SLOT_LEN_MIN);
+        if (hit) html += `<option value="${hh}" disabled>${formatTime(hh)} — unavailable</option>`;
+        else html += `<option value="${hh}">${formatTime(hh)}</option>`;
     }
-    grid.innerHTML = html;
-    document.getElementById('slot-legend').style.display = 'flex';
-}
-
-function pickSlot(el, mins) {
-    document.getElementById('bookTime').value = timeStrOf(mins);
-    document.querySelectorAll('#slot-grid .slot').forEach(s => s.classList.remove('selected'));
-    el.classList.add('selected');
+    sel.innerHTML = html;
+    sel.disabled = false;
+    // Restore the previous choice if it's still available (e.g. after an auto-refresh)
+    const stillThere = [...sel.options].some(o => o.value === prev && !o.disabled);
+    sel.value = stillThere ? prev : '';
 }
 
 function onBookingDateChange() {
-    document.getElementById('bookTime').value = '';
     renderTimeSlots();
 }
 
