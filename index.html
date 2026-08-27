@@ -341,7 +341,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 <div class="modal-bg" id="blockModal">
     <div class="modal">
         <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:6px;">🚫 Block Out Time</h3>
-        <p style="color:var(--muted-dark); font-size:13px; margin-bottom:20px;">Mark times you can't work. Recurring blocks repeat every week; one-time blocks apply to a single date.</p>
+        <p style="color:var(--muted-dark); font-size:13px; margin-bottom:20px;">Mark times you can't work — save as many blocks as you want, then tap Done. Recurring blocks repeat every week; one-time blocks apply to a single date.</p>
 
         <div style="display:flex; gap:8px; margin-bottom:18px;">
             <button type="button" id="blockTypeOnce" class="btn btn-small" style="flex:1; margin-top:0;" onclick="setBlockType('once')">One-Time</button>
@@ -373,7 +373,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
         <div class="form-group"><label>Reason (optional)</label><input type="text" id="blockNote" placeholder="e.g. Class, other job..."></div>
 
         <div style="display:flex; gap:12px; margin-top:20px;">
-            <button class="btn btn-outline" style="flex:1;" onclick="closeModal('blockModal')">Cancel</button>
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal('blockModal')">Done</button>
             <button class="btn btn-primary" style="flex:1.5;" onclick="saveBlock()">Save Block</button>
         </div>
     </div>
@@ -1381,12 +1381,35 @@ function getSchedWeekDates() {
     return Array.from({length: 7}, (_, i) => { const d = new Date(sunday); d.setDate(sunday.getDate() + i); return d; });
 }
 
-// Stable per-person color so blocks are easy to tell apart in the group view
-function userColor(userId) {
-    const hues = [265, 45, 140, 200, 340, 15, 100, 175, 300, 230];
+// 10-color member palette — each color can belong to only one person at a time
+const AVAIL_COLORS = [265, 45, 140, 200, 340, 15, 100, 175, 300, 230];
+
+function userColorIdx(user) {
+    if (user.colorIdx !== undefined && user.colorIdx !== null && user.colorIdx !== '') {
+        return ((parseInt(user.colorIdx) % 10) + 10) % 10;
+    }
+    // default before they pick one: stable hash of their id
     let n = 0;
-    String(userId).split('').forEach(c => n += c.charCodeAt(0));
-    return hues[n % hues.length];
+    String(user.id).split('').forEach(c => n += c.charCodeAt(0));
+    return n % AVAIL_COLORS.length;
+}
+
+function userColor(userId) {
+    const u = APP.users.find(x => x.id == userId);
+    if (!u) return AVAIL_COLORS[0];
+    return AVAIL_COLORS[userColorIdx(u)];
+}
+
+async function pickMyColor(idx) {
+    const owner = APP.users.find(u => u.id !== APP.currentUser.id && userColorIdx(u) === idx);
+    if (owner) return showToast(`That color belongs to ${owner.name}.`, 'error');
+    const user = APP.users.find(u => u.id === APP.currentUser.id);
+    if (!user) return;
+    user.colorIdx = idx;
+    APP.currentUser.colorIdx = idx;
+    renderCurrentPage();
+    showToast('Your color was updated.');
+    await pushCloudData();
 }
 
 // All of a user's blocks that apply on a given date (one-time + weekly recurring)
@@ -1411,7 +1434,23 @@ function blockChipHTML(user, b, canDelete) {
         <div style="width:10px; height:10px; border-radius:50%; background:hsl(${hue}, 55%, 45%); flex-shrink:0;"></div>
         <span style="font-size:13px; font-weight:700; color:var(--text-dark); white-space:nowrap;">${sanitize(user.name)}</span>
         <span style="font-size:12px; color:var(--muted-dark); flex:1;">${blockLabel(b)}</span>
-        ${canDelete ? `<button onclick="deleteBlock(${b.id}, ${user.id})" style="background:transparent; border:none; color:var(--danger); font-size:16px; cursor:pointer; padding:2px 6px;">✖</button>` : ''}
+        ${canDelete ? `<button onclick="event.stopPropagation(); deleteBlock(${b.id}, ${user.id})" style="background:transparent; border:none; color:var(--danger); font-size:16px; cursor:pointer; padding:2px 6px;">✖</button>` : ''}
+    </div>`;
+}
+
+function colorPickerHTML() {
+    const myIdx = userColorIdx(APP.currentUser);
+    return `
+    <div class="mobile-card" style="margin-bottom:16px;" onclick="event.stopPropagation();">
+        <div style="font-size:12px; font-weight:700; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">My Color</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            ${AVAIL_COLORS.map((hue, i) => {
+                const mine = myIdx === i;
+                const owner = APP.users.find(u => u.id !== APP.currentUser.id && userColorIdx(u) === i);
+                return `<button onclick="pickMyColor(${i})" ${owner ? 'disabled' : ''} title="${owner ? sanitize(owner.name) + ' has this color' : 'Use this color'}" style="width:34px; height:34px; border-radius:50%; background:hsl(${hue}, 55%, 55%); border:${mine ? '3px solid var(--text-dark)' : '2px solid rgba(0,0,0,0.12)'}; cursor:${owner ? 'not-allowed' : 'pointer'}; opacity:${owner ? 0.35 : 1}; display:flex; align-items:center; justify-content:center;">${owner ? `<span style="color:#fff; font-size:12px; font-weight:800;">${sanitize(owner.name.charAt(0).toUpperCase())}</span>` : ''}</button>`;
+            }).join('')}
+        </div>
+        <p style="font-size:11px; color:var(--muted-dark); margin-top:10px;">Your color marks your blocks on the group schedule. Each color can only belong to one member — taken colors show the owner's initial.</p>
     </div>`;
 }
 
@@ -1444,7 +1483,7 @@ function renderTeamSchedulePage(main, isAdmin) {
             const mine = blocksForDate(APP.currentUser, d);
             chipsHTML = mine.length
                 ? mine.map(b => blockChipHTML(APP.currentUser, b, true)).join('')
-                : `<p style="font-size:12px; color:var(--muted-dark); margin-top:8px;">You're available all day.</p>`;
+                : `<p style="font-size:12px; color:var(--muted-dark); margin-top:8px;">You're available all day — tap to block time.</p>`;
         } else {
             const blocked = APP.users.map(u => ({ user: u, blocks: blocksForDate(u, d) })).filter(x => x.blocks.length > 0);
             chipsHTML = blocked.length
@@ -1453,10 +1492,10 @@ function renderTeamSchedulePage(main, isAdmin) {
         }
 
         return `
-        <div class="mobile-card" style="${isToday ? 'border:2px solid var(--accent);' : ''}">
+        <div class="mobile-card ${schedView === 'mine' ? 'clickable' : ''}" style="${isToday ? 'border:2px solid var(--accent);' : ''}" ${schedView === 'mine' ? `onclick="openBlockModal('${dateStr}', ${d.getDay()})"` : ''}>
             <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
                 <h3 style="font-size:14px; color:var(--text-dark);">${dayNames[d.getDay()]} ${isToday ? '<span style="font-size:10px; color:var(--accent); font-weight:700;"> · TODAY</span>' : ''}</h3>
-                <span style="font-size:12px; color:var(--muted-dark);">${d.toLocaleDateString('en-US', {month:'short', day:'numeric'})}</span>
+                <span style="font-size:12px; color:var(--muted-dark);">${d.toLocaleDateString('en-US', {month:'short', day:'numeric'})}${schedView === 'mine' ? ' · tap to block' : ''}</span>
             </div>
             ${showsHTML}
             ${showsHTML ? '<div style="border-top:1px solid var(--border-light); margin-top:6px;"></div>' : ''}
@@ -1481,15 +1520,20 @@ function renderTeamSchedulePage(main, isAdmin) {
 
         ${schedView === 'mine' ? `<button class="btn btn-primary" style="margin-top:0; margin-bottom:16px;" onclick="openBlockModal()">🚫 Block Out Time</button>` : ''}
 
+        ${schedView === 'mine' ? colorPickerHTML() : ''}
+
         ${daysHTML}
 
         <p style="font-size:11px; color:var(--muted-dark); text-align:center; margin-top:8px;">🔁 = repeats weekly &nbsp;·&nbsp; 1️⃣ = one-time only</p>
     </div>`;
 }
 
-function openBlockModal() {
+function openBlockModal(dateStr, dow) {
     setBlockType('once');
-    document.getElementById('blockDate').value = localDateStr(new Date());
+    document.getElementById('blockDate').value = dateStr || localDateStr(new Date());
+    if (dow !== undefined && dow !== null) document.getElementById('blockDay').value = String(dow);
+    document.getElementById('blockStart').value = '';
+    document.getElementById('blockEnd').value = '';
     document.getElementById('blockNote').value = '';
     document.getElementById('blockModal').classList.add('open');
 }
@@ -1525,9 +1569,12 @@ async function saveBlock() {
     user.blocks.push(block);
     APP.currentUser.blocks = user.blocks;
 
-    closeModal('blockModal');
+    // Stay open so you can add as many blocks as you want — tap Done when finished
     renderCurrentPage();
-    showToast(blockType === 'recurring' ? 'Recurring block saved — repeats every week.' : 'One-time block saved.');
+    document.getElementById('blockStart').value = '';
+    document.getElementById('blockEnd').value = '';
+    document.getElementById('blockNote').value = '';
+    showToast(blockType === 'recurring' ? 'Recurring block saved — add another or tap Done.' : 'Block saved — add another or tap Done.');
     await pushCloudData();
 }
 
