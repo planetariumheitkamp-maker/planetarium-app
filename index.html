@@ -157,6 +157,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast.error{background:var(--danger); color:#fff;}
 </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -337,6 +338,47 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
     </div>
 </div>
 
+<div class="modal-bg" id="blockModal">
+    <div class="modal">
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:6px;">🚫 Block Out Time</h3>
+        <p style="color:var(--muted-dark); font-size:13px; margin-bottom:20px;">Mark times you can't work. Recurring blocks repeat every week; one-time blocks apply to a single date.</p>
+
+        <div style="display:flex; gap:8px; margin-bottom:18px;">
+            <button type="button" id="blockTypeOnce" class="btn btn-small" style="flex:1; margin-top:0;" onclick="setBlockType('once')">One-Time</button>
+            <button type="button" id="blockTypeRecurring" class="btn btn-small btn-outline" style="flex:1; margin-top:0;" onclick="setBlockType('recurring')">Recurring Weekly</button>
+        </div>
+
+        <div class="form-group" id="blockDateGroup">
+            <label>Date</label>
+            <input type="date" id="blockDate">
+        </div>
+        <div class="form-group" id="blockDayGroup" style="display:none;">
+            <label>Day of the Week</label>
+            <select id="blockDay" style="width:100%; padding:14px; border-radius:12px; border:1px solid var(--border-light); background:var(--card-bg); color:var(--text-dark); font-family:var(--font); font-size:16px; outline:none;">
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+            </select>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+            <div class="form-group" style="flex:1;"><label>Start</label><input type="time" id="blockStart" value="09:00"></div>
+            <div class="form-group" style="flex:1;"><label>End</label><input type="time" id="blockEnd" value="17:00"></div>
+        </div>
+
+        <div class="form-group"><label>Reason (optional)</label><input type="text" id="blockNote" placeholder="e.g. Class, other job..."></div>
+
+        <div style="display:flex; gap:12px; margin-top:20px;">
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal('blockModal')">Cancel</button>
+            <button class="btn btn-primary" style="flex:1.5;" onclick="saveBlock()">Save Block</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal-bg" id="roleModal">
     <div class="modal">
         <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:20px;">Manage Staff Positions</h3>
@@ -467,6 +509,11 @@ function parseAssignments(val) {
     if (typeof val === 'string') { try { return JSON.parse(val); } catch(e) { return []; } }
     return Array.isArray(val) ? val : [];
 }
+function parseBlocks(val) {
+    if (!val) return [];
+    if (typeof val === 'string') { try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch(e) { return []; } }
+    return Array.isArray(val) ? val : [];
+}
 
 async function backgroundSync(forceRender = false) {
     if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") return;
@@ -482,7 +529,7 @@ async function backgroundSync(forceRender = false) {
             if (data.time) APP.time = { total: parseFloat(data.time.total)||0, max: parseFloat(data.time.max)||1000 };
             if (data.timeLogs) APP.timeLogs = data.timeLogs;
             if (data.users && data.users.length > 0) {
-                    APP.users = data.users;
+                    APP.users = data.users.map(u => ({...u, blocks: parseBlocks(u.blocks)}));
             }
             
             APP.settings = data.settings || { inviteKey: 'STARLIGHT', notifsEnabled: true, pauseShows: false };
@@ -911,6 +958,7 @@ function initWorkerApp() {
     
     let navHTML = `
         <div class="nav-item" onclick="wNav('events', this)"><div class="icon">📅</div>Schedule</div>
+        <div class="nav-item" onclick="wNav('schedule', this)"><div class="icon">🗓️</div>Availability</div>
         <div class="nav-item" onclick="wNav('time', this)"><div class="icon">⏱️</div>Timeclock</div>
         <div class="nav-item" onclick="wNav('settings', this)"><div class="icon">⚙️</div>Settings</div>
     `;
@@ -926,8 +974,9 @@ function wNav(page, element) {
     else {
         const items = document.querySelectorAll('.nav-item');
         if(page === 'events' && items.length > 0) items[0].classList.add('active');
-        if(page === 'time' && items.length > 1) items[1].classList.add('active');
-        if(page === 'settings' && items.length > 2) items[2].classList.add('active');
+        if(page === 'schedule' && items.length > 1) items[1].classList.add('active');
+        if(page === 'time' && items.length > 2) items[2].classList.add('active');
+        if(page === 'settings' && items.length > 3) items[3].classList.add('active');
     }
     renderCurrentPage();
 }
@@ -1238,6 +1287,9 @@ function renderCurrentPage() {
         </div>`;
     }
 
+    else if(currentAppPage === 'schedule') {
+        renderTeamSchedulePage(main, isAdmin);
+    }
     else if(currentAppPage === 'settings') {
         const adminUI = isAdmin ? `
             <h3 style="font-size:13px; color:var(--muted-dark); text-transform:uppercase; letter-spacing:1px; margin-top:24px; margin-bottom:12px;">Admin Controls</h3>
@@ -1307,6 +1359,187 @@ function renderCurrentPage() {
             </div>
         </div>`;
     }
+}
+
+// ============================================================================
+// TEAM AVAILABILITY / GROUP SCHEDULE
+// ============================================================================
+let schedView = 'mine';       // 'mine' | 'group'
+let schedWeekOffset = 0;      // 0 = current week
+let blockType = 'once';       // 'once' | 'recurring'
+
+function setSchedView(v) { schedView = v; renderCurrentPage(); }
+function changeSchedWeek(dir) { schedWeekOffset += dir; renderCurrentPage(); }
+
+function localDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function getSchedWeekDates() {
+    const now = new Date();
+    const sunday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + schedWeekOffset * 7);
+    return Array.from({length: 7}, (_, i) => { const d = new Date(sunday); d.setDate(sunday.getDate() + i); return d; });
+}
+
+// Stable per-person color so blocks are easy to tell apart in the group view
+function userColor(userId) {
+    const hues = [265, 45, 140, 200, 340, 15, 100, 175, 300, 230];
+    let n = 0;
+    String(userId).split('').forEach(c => n += c.charCodeAt(0));
+    return hues[n % hues.length];
+}
+
+// All of a user's blocks that apply on a given date (one-time + weekly recurring)
+function blocksForDate(user, dateObj) {
+    const dateStr = localDateStr(dateObj);
+    const dow = dateObj.getDay();
+    return parseBlocks(user.blocks).filter(b =>
+        (b.type === 'once' && b.date === dateStr) ||
+        (b.type === 'recurring' && parseInt(b.day) === dow)
+    );
+}
+
+function blockLabel(b) {
+    const tag = b.type === 'recurring' ? '🔁' : '1️⃣';
+    return `${tag} ${formatTime(b.start)} – ${formatTime(b.end)}${b.note ? ` · ${sanitize(b.note)}` : ''}`;
+}
+
+function blockChipHTML(user, b, canDelete) {
+    const hue = userColor(user.id);
+    return `
+    <div style="display:flex; align-items:center; gap:8px; background:hsla(${hue}, 45%, 92%, 1); border:1px solid hsla(${hue}, 45%, 70%, 1); border-radius:10px; padding:8px 10px; margin-top:8px;">
+        <div style="width:10px; height:10px; border-radius:50%; background:hsl(${hue}, 55%, 45%); flex-shrink:0;"></div>
+        <span style="font-size:13px; font-weight:700; color:var(--text-dark); white-space:nowrap;">${sanitize(user.name)}</span>
+        <span style="font-size:12px; color:var(--muted-dark); flex:1;">${blockLabel(b)}</span>
+        ${canDelete ? `<button onclick="deleteBlock(${b.id}, ${user.id})" style="background:transparent; border:none; color:var(--danger); font-size:16px; cursor:pointer; padding:2px 6px;">✖</button>` : ''}
+    </div>`;
+}
+
+function renderTeamSchedulePage(main, isAdmin) {
+    const dates = getSchedWeekDates();
+    const first = dates[0], last = dates[6];
+    const weekLabel = `${first.toLocaleDateString('en-US', {month:'short', day:'numeric'})} – ${last.toLocaleDateString('en-US', {month:'short', day:'numeric'})}`;
+    const todayStr = localDateStr(new Date());
+    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+    const daysHTML = dates.map(d => {
+        const dateStr = localDateStr(d);
+        const isToday = dateStr === todayStr;
+
+        // Shows scheduled this day, for context
+        const shows = [
+            ...APP.events.filter(e => !e.archived && String(e.date).split('T')[0] === dateStr).map(e => ({ title: e.title, time: e.time, kind: 'PUBLIC' })),
+            ...APP.requests.filter(r => !r.archived && String(r.date).split('T')[0] === dateStr).map(r => ({ title: r.group || r.title || 'Private Show', time: r.time, kind: 'PRIVATE' }))
+        ].sort((a,b) => (a.time || '').localeCompare(b.time || ''));
+
+        const showsHTML = shows.map(s => `
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13px; color:var(--text-dark);">
+                <span class="badge ${s.kind === 'PUBLIC' ? 'badge-public' : 'badge-private'}" style="font-size:9px;">${s.kind}</span>
+                <span style="font-weight:600;">${sanitize(s.title)}</span>
+                <span style="color:var(--muted-dark); margin-left:auto;">${formatTime(s.time)}</span>
+            </div>`).join('');
+
+        let chipsHTML = '';
+        if (schedView === 'mine') {
+            const mine = blocksForDate(APP.currentUser, d);
+            chipsHTML = mine.length
+                ? mine.map(b => blockChipHTML(APP.currentUser, b, true)).join('')
+                : `<p style="font-size:12px; color:var(--muted-dark); margin-top:8px;">You're available all day.</p>`;
+        } else {
+            const blocked = APP.users.map(u => ({ user: u, blocks: blocksForDate(u, d) })).filter(x => x.blocks.length > 0);
+            chipsHTML = blocked.length
+                ? blocked.map(x => x.blocks.map(b => blockChipHTML(x.user, b, isAdmin)).join('')).join('')
+                : `<p style="font-size:12px; color:var(--success); margin-top:8px; font-weight:600;">✓ Everyone is available</p>`;
+        }
+
+        return `
+        <div class="mobile-card" style="${isToday ? 'border:2px solid var(--accent);' : ''}">
+            <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                <h3 style="font-size:14px; color:var(--text-dark);">${dayNames[d.getDay()]} ${isToday ? '<span style="font-size:10px; color:var(--accent); font-weight:700;"> · TODAY</span>' : ''}</h3>
+                <span style="font-size:12px; color:var(--muted-dark);">${d.toLocaleDateString('en-US', {month:'short', day:'numeric'})}</span>
+            </div>
+            ${showsHTML}
+            ${showsHTML ? '<div style="border-top:1px solid var(--border-light); margin-top:6px;"></div>' : ''}
+            ${chipsHTML}
+        </div>`;
+    }).join('');
+
+    main.innerHTML = `<div class="wpage active">
+        <h2 style="color:var(--text-dark); margin-bottom:6px;">Team Availability</h2>
+        <p style="color:var(--muted-dark); font-size:13px; margin-bottom:18px;">Block out times you can't work — one-time or weekly recurring.</p>
+
+        <div style="display:flex; background:var(--card-bg); border:1px solid var(--border-light); border-radius:12px; padding:4px; margin-bottom:16px;">
+            <button onclick="setSchedView('mine')" style="flex:1; padding:10px; border:none; border-radius:9px; cursor:pointer; font-family:var(--font); font-weight:700; font-size:13px; ${schedView === 'mine' ? 'background:var(--surface); color:#fff;' : 'background:transparent; color:var(--muted-dark);'}">My Blocks</button>
+            <button onclick="setSchedView('group')" style="flex:1; padding:10px; border:none; border-radius:9px; cursor:pointer; font-family:var(--font); font-weight:700; font-size:13px; ${schedView === 'group' ? 'background:var(--surface); color:#fff;' : 'background:transparent; color:var(--muted-dark);'}">Group Schedule</button>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <button class="btn btn-outline btn-small" style="width:auto; margin-top:0;" onclick="changeSchedWeek(-1)">← Prev</button>
+            <span style="font-weight:700; font-size:14px; color:var(--text-dark);">${weekLabel}</span>
+            <button class="btn btn-outline btn-small" style="width:auto; margin-top:0;" onclick="changeSchedWeek(1)">Next →</button>
+        </div>
+
+        ${schedView === 'mine' ? `<button class="btn btn-primary" style="margin-top:0; margin-bottom:16px;" onclick="openBlockModal()">🚫 Block Out Time</button>` : ''}
+
+        ${daysHTML}
+
+        <p style="font-size:11px; color:var(--muted-dark); text-align:center; margin-top:8px;">🔁 = repeats weekly &nbsp;·&nbsp; 1️⃣ = one-time only</p>
+    </div>`;
+}
+
+function openBlockModal() {
+    setBlockType('once');
+    document.getElementById('blockDate').value = localDateStr(new Date());
+    document.getElementById('blockNote').value = '';
+    document.getElementById('blockModal').classList.add('open');
+}
+
+function setBlockType(t) {
+    blockType = t;
+    document.getElementById('blockTypeOnce').className = 'btn btn-small' + (t === 'once' ? '' : ' btn-outline');
+    document.getElementById('blockTypeRecurring').className = 'btn btn-small' + (t === 'recurring' ? '' : ' btn-outline');
+    document.getElementById('blockDateGroup').style.display = t === 'once' ? 'block' : 'none';
+    document.getElementById('blockDayGroup').style.display = t === 'recurring' ? 'block' : 'none';
+}
+
+async function saveBlock() {
+    const start = document.getElementById('blockStart').value;
+    const end = document.getElementById('blockEnd').value;
+    const note = document.getElementById('blockNote').value.trim();
+
+    if (!start || !end) return showToast('Please set a start and end time.', 'error');
+    if (start >= end) return showToast('End time must be after start time.', 'error');
+
+    const block = { id: Date.now(), type: blockType, start, end, note };
+    if (blockType === 'once') {
+        const date = document.getElementById('blockDate').value;
+        if (!date) return showToast('Please pick a date.', 'error');
+        block.date = date;
+    } else {
+        block.day = parseInt(document.getElementById('blockDay').value);
+    }
+
+    const user = APP.users.find(u => u.id === APP.currentUser.id);
+    if (!user) return showToast('Could not find your user record.', 'error');
+    user.blocks = parseBlocks(user.blocks);
+    user.blocks.push(block);
+    APP.currentUser.blocks = user.blocks;
+
+    closeModal('blockModal');
+    renderCurrentPage();
+    showToast(blockType === 'recurring' ? 'Recurring block saved — repeats every week.' : 'One-time block saved.');
+    await pushCloudData();
+}
+
+async function deleteBlock(blockId, userId) {
+    const uid = userId || APP.currentUser.id;
+    const user = APP.users.find(u => u.id === uid);
+    if (!user) return;
+    user.blocks = parseBlocks(user.blocks).filter(b => b.id !== blockId);
+    if (uid === APP.currentUser.id) APP.currentUser.blocks = user.blocks;
+    renderCurrentPage();
+    showToast('Block removed.');
+    await pushCloudData();
 }
 
 // ============================================================================
