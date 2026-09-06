@@ -1,0 +1,86 @@
+<svg width="1200" height="700" viewBox="0 0 1200 700" fill="none" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace">
+  <!-- Cross-section of a dome theater: 180° equidistant fisheye projection -->
+  <g stroke="#D1B888" stroke-width="1.5" fill="none">
+    <!-- ground / horizon line -->
+    <line x1="180" y1="560" x2="1020" y2="560"/>
+    <g stroke-width="0.75" opacity="0.5">
+      <line x1="220" y1="560" x2="205" y2="575"/>
+      <line x1="280" y1="560" x2="265" y2="575"/>
+      <line x1="340" y1="560" x2="325" y2="575"/>
+      <line x1="400" y1="560" x2="385" y2="575"/>
+      <line x1="460" y1="560" x2="445" y2="575"/>
+      <line x1="520" y1="560" x2="505" y2="575"/>
+      <line x1="580" y1="560" x2="565" y2="575"/>
+      <line x1="640" y1="560" x2="625" y2="575"/>
+      <line x1="700" y1="560" x2="685" y2="575"/>
+      <line x1="760" y1="560" x2="745" y2="575"/>
+      <line x1="820" y1="560" x2="805" y2="575"/>
+      <line x1="880" y1="560" x2="865" y2="575"/>
+      <line x1="940" y1="560" x2="925" y2="575"/>
+    </g>
+
+    <!-- dome hemisphere (cross-section), center (600,560) r=380 -->
+    <path d="M220 560 A 380 380 0 0 1 980 560" />
+    <!-- dashed zenith arc guides -->
+    <g stroke-dasharray="4 7" stroke-width="1" opacity="0.55">
+      <path d="M318 560 A 282 282 0 0 1 882 560"/>
+      <path d="M416 560 A 184 184 0 0 1 784 560"/>
+      <path d="M506 560 A 94 94 0 0 1 694 560"/>
+    </g>
+
+    <!-- projection axis -->
+    <line x1="600" y1="600" x2="600" y2="140" stroke-dasharray="2 6" stroke-width="1"/>
+    <!-- projector -->
+    <rect x="582" y="536" width="36" height="24" rx="4"/>
+    <circle cx="600" cy="548" r="5" fill="#D1B888" stroke="none"/>
+
+    <!-- 180° projection fan from projector to dome edges -->
+    <g stroke-width="1" opacity="0.8">
+      <line x1="600" y1="548" x2="220" y2="560"/>
+      <line x1="600" y1="548" x2="980" y2="560"/>
+      <line x1="600" y1="548" x2="600" y2="180" stroke-dasharray="6 6" opacity="0.7"/>
+    </g>
+    <!-- fov rays -->
+    <g stroke-width="1" opacity="0.45" stroke-dasharray="3 6">
+      <line x1="600" y1="548" x2="331" y2="291"/>
+      <line x1="600" y1="548" x2="869" y2="291"/>
+    </g>
+
+    <!-- 180° angle arc at projector -->
+    <path d="M560 548 A 40 40 0 0 1 640 548" stroke-width="1"/>
+  </g>
+
+  <!-- angle ticks on dome rim (every 30°) -->
+  <g stroke="#D1B888" stroke-width="1.5" opacity="0.9">
+    <line x1="220" y1="560" x2="240" y2="560"/>
+    <line x1="271" y1="370" x2="287" y2="379"/>
+    <line x1="410" y1="231" x2="420" y2="247"/>
+    <line x1="600" y1="180" x2="600" y2="200"/>
+    <line x1="790" y1="231" x2="780" y2="247"/>
+    <line x1="929" y1="370" x2="913" y2="379"/>
+    <line x1="980" y1="560" x2="960" y2="560"/>
+  </g>
+
+  <!-- zenith marker -->
+  <circle cx="600" cy="180" r="4" fill="#D1B888"/>
+  <!-- focal star -->
+  <path d="M600 470 L602.4 477.6 L610 480 L602.4 482.4 L600 490 L597.6 482.4 L590 480 L597.6 477.6 Z" fill="#D1B888"/>
+
+  <!-- labels -->
+  <g fill="#D1B888" font-size="20" letter-spacing="2">
+    <text x="600" y="120" text-anchor="middle">ZENITH</text>
+    <text x="196" y="600" text-anchor="middle">0°</text>
+    <text x="1004" y="600" text-anchor="middle">180°</text>
+    <text x="600" y="640" text-anchor="middle">PROJECTION AXIS</text>
+    <text x="470" y="480" text-anchor="end">FOV 180°</text>
+    <text x="330" y="355" text-anchor="middle" font-size="16" opacity="0.85">90°</text>
+    <text x="424" y="226" text-anchor="middle" font-size="16" opacity="0.85">120°</text>
+    <text x="780" y="226" text-anchor="middle" font-size="16" opacity="0.85">120°</text>
+    <text x="876" y="355" text-anchor="middle" font-size="16" opacity="0.85">90°</text>
+  </g>
+  <g fill="#D1B888" font-size="16" letter-spacing="3" opacity="0.75">
+    <text x="600" y="676" text-anchor="middle">EQUIDISTANT DOME MASTER — r ∝ θ</text>
+    <text x="180" y="140">HORIZON</text>
+  </g>
+  <line x1="180" y1="152" x2="180" y2="548" stroke="#D1B888" stroke-width="0.75" stroke-dasharray="2 6" opacity="0.5"/>
+</svg>

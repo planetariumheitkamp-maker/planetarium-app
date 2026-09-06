@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- dome horizon circle -->
+  <circle cx="32" cy="40" r="16" stroke="#D1B888" stroke-width="2"/>
+  <!-- horizon baseline -->
+  <line x1="8" y1="56" x2="56" y2="56" stroke="#D1B888" stroke-width="2" stroke-linecap="round"/>
+  <!-- arc sweeping above the dome -->
+  <path d="M6 34 A 30 30 0 0 1 58 34" stroke="#D1B888" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- gold star at the focal point -->
+  <path d="M32 8 L34.1 13.9 L40 16 L34.1 18.1 L32 24 L29.9 18.1 L24 16 L29.9 13.9 Z" fill="#D1B888"/>
+</svg>
