@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 255 60% 5%;
+    --foreground: 258 45% 96%;
+    --card: 255 50% 11%;
+    --card-foreground: 258 45% 96%;
+    --popover: 255 50% 11%;
+    --popover-foreground: 258 45% 96%;
+    --primary: 258 47% 33%;
+    --primary-foreground: 258 45% 96%;
+    --secondary: 255 52% 16%;
+    --secondary-foreground: 258 45% 96%;
+    --muted: 255 52% 16%;
+    --muted-foreground: 258 26% 69%;
+    --accent: 255 52% 16%;
+    --accent-foreground: 258 45% 96%;
+    --destructive: 0 91% 71%;
+    --destructive-foreground: 258 45% 96%;
+    --border: 254 43% 25%;
+    --input: 254 43% 25%;
+    --ring: 258 47% 33%;
+    --radius: 0.75rem;
+    --sidebar-background: 255 60% 5%;
+    --sidebar-foreground: 258 45% 96%;
+    --sidebar-primary: 258 47% 33%;
+    --sidebar-primary-foreground: 258 45% 96%;
+    --sidebar-accent: 255 52% 16%;
+    --sidebar-accent-foreground: 258 45% 96%;
+    --sidebar-border: 254 43% 25%;
+    --sidebar-ring: 38 47% 68%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-cosmos text-ink font-sans antialiased;
+    letter-spacing: 0.01em;
+  }
+
+  ::selection {
+    background: rgba(209, 184, 136, 0.3);
+    color: #f2eefb;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #06030f;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2a2050;
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #442d7d;
+  }
+}
+
+@layer components {
+  /* Glass panel: floating controls over media (design.md §2) */
+  .glass-panel {
+    background: rgba(21, 14, 43, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(209, 184, 136, 0.14);
+  }
+
+  /* Gradient headline text */
+  .text-gold-sheen {
+    background: linear-gradient(120deg, #d1b888, #ebd9ae, #b08d4f);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Ambient starfield (pure CSS, tileable) */
+  .starfield {
+    background-image:
+      radial-gradient(1px 1px at 20px 30px, rgba(242, 238, 251, 0.8) 50%, transparent 51%),
+      radial-gradient(1px 1px at 130px 80px, rgba(242, 238, 251, 0.5) 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 70px 150px, rgba(209, 184, 136, 0.6) 50%, transparent 51%),
+      radial-gradient(1px 1px at 180px 200px, rgba(242, 238, 251, 0.4) 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 40px 240px, rgba(167, 157, 196, 0.5) 50%, transparent 51%),
+      radial-gradient(1px 1px at 220px 120px, rgba(242, 238, 251, 0.6) 50%, transparent 51%);
+    background-size: 260px 280px;
+  }
+
+  /* Loading shimmer sweep (gold-sheen at low opacity) */
+  .shimmer {
+    background: linear-gradient(
+      100deg,
+      rgba(21, 14, 43, 0) 40%,
+      rgba(209, 184, 136, 0.08) 50%,
+      rgba(21, 14, 43, 0) 60%
+    );
+    background-size: 200% 100%;
+  }
+
+  .kicker {
+    @apply font-display text-xs font-medium uppercase tracking-[0.35em] text-gold;
+  }
+
+  /* Workflow console panel swap (home §4) */
+  .workflow-panel {
+    animation: panel-swap 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @keyframes panel-swap {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
