@@ -18,3 +18,8 @@ The app expects planet textures at `public/media/*.jpg` — these are the same J
 ---
 
 Batch 1/9 file list: README-DOMEMASTER.md, .gitignore, README.md, components.json, eslint.config.js, index.html, package.json, postcss.config.js, public/logo.svg, public/spec-dome-diagram.svg, src/App.tsx, src/components/AppShell.tsx
+
+## v2 Update (fixes + improvements)
+- **Editor**: fixed black-stage bug (canvas remount on source select); renderer lifecycle now tied to the canvas node. Auto-loads last-used/first source, persists parameters, JPEG export option (alongside PNG), source info chip, drag hint, graceful decode-failure fallback.
+- **Player**: videos start muted with an unmute toggle (M) so autoplay never freezes the show; unplayable videos are skipped in AUTO mode; object-URL leak fixed; queue auto-refreshes on window focus; settings persisted; next-item preload; per-item progress bar; object-contain fit; present-mode vignette + film grain.
+- **Library**: hover video previews, persisted sort/tab, "Export all" bulk action, 80%-quota storage warning.

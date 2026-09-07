@@ -360,18 +360,22 @@ export class FisheyeRenderer {
   }
 }
 
-/* --------------------------- offscreen PNG export --------------------------- */
+/* --------------------------- offscreen frame export -------------------------- */
+
+export type ExportImageFormat = 'png' | 'jpeg';
 
 /**
  * Render one frame at an exact square export resolution (up to 2048) on a
- * temporary canvas + context, and return a PNG blob.
+ * temporary canvas + context, and return an encoded blob. JPEG is encoded at
+ * quality 0.92 (export spec).
  */
-export async function renderPngBlob(
+export async function renderFrameBlob(
   source: TexImageSource,
   srcW: number,
   srcH: number,
   size: number,
   params: RenderState,
+  format: ExportImageFormat = 'png',
 ): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -380,10 +384,11 @@ export async function renderPngBlob(
   try {
     renderer.uploadSource(source, srcW, srcH);
     renderer.render({ ...params, compare: false });
+    const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob((b) => resolve(b), 'image/png'),
+      canvas.toBlob((b) => resolve(b), mime, format === 'jpeg' ? 0.92 : undefined),
     );
-    if (!blob) throw new Error('PNG encode failed');
+    if (!blob) throw new Error(`${format.toUpperCase()} encode failed`);
     return blob;
   } finally {
     renderer.dispose();
