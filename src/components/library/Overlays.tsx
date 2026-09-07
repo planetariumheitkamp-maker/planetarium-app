@@ -111,10 +111,11 @@ export function BulkBar({
           <button
             type="button"
             onClick={onDownloadAll}
+            title="Download each selected item, one by one"
             className="flex items-center gap-1.5 rounded-full border border-line px-4 py-1.5 font-display text-[10px] font-medium uppercase tracking-widest text-ink-dim transition-colors hover:border-violet-hi hover:text-ink"
           >
             <Download className="h-3.5 w-3.5" />
-            Download
+            Export all
           </button>
           <button
             type="button"

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Trash2 } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 import type { StorageUsage } from '@/lib/types';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { formatBytes } from './utils';
+
+const WARN_RATIO = 0.8;
 
 export function StorageFooter({
   usage,
@@ -23,6 +26,7 @@ export function StorageFooter({
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const pct = Math.min(100, Math.max(0, usage.ratio * 100));
+  const warn = usage.quota > 0 && usage.ratio >= WARN_RATIO;
   const label =
     usage.quota > 0
       ? `${formatBytes(usage.usage)} / ${formatBytes(usage.quota)}`
@@ -34,13 +38,24 @@ export function StorageFooter({
       <div className="flex items-center gap-3">
         <div className="h-1.5 w-48 overflow-hidden rounded-full bg-dusk">
           <motion.div
-            className="h-full rounded-full bg-gold"
+            className={cn('h-full rounded-full', warn ? 'bg-danger' : 'bg-gold')}
             initial={{ width: 0 }}
             animate={{ width: `${pct}%` }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           />
         </div>
-        <span className="whitespace-nowrap font-mono text-[10px] text-ink-faint">{label}</span>
+        {warn && (
+          <AlertTriangle className="h-3.5 w-3.5 animate-pulse text-danger" strokeWidth={2} />
+        )}
+        <span
+          className={cn(
+            'whitespace-nowrap font-mono text-[10px]',
+            warn ? 'text-danger' : 'text-ink-faint',
+          )}
+        >
+          {label}
+          {warn && ' · storage nearly full'}
+        </span>
       </div>
 
       {/* Status line */}

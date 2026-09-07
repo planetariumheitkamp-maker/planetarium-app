@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, CircleDot, Download, Info, ListPlus, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MediaItem } from '@/lib/types';
+import { resolveMediaUrl, revokeMediaUrl } from '@/lib/db';
 import { formatBytes, formatDuration, itemSize } from './utils';
 
 export interface LibraryHandlers {
@@ -138,6 +139,55 @@ function InlineName({
   );
 }
 
+/**
+ * Muted loop preview for video cards: resolves the full media URL lazily on
+ * first hover, plays on hover, pauses + rewinds + releases on leave/unmount.
+ */
+function useHoverPreview(item: MediaItem) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const urlRef = useRef<string | null>(null);
+
+  const startPreview = () => {
+    if (item.type !== 'video' || urlRef.current) return;
+    resolveMediaUrl(item)
+      .then((url) => {
+        urlRef.current = url;
+        setPreviewUrl(url);
+      })
+      .catch(() => undefined);
+  };
+
+  const stopPreview = () => {
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      v.currentTime = 0;
+    }
+    if (urlRef.current) {
+      revokeMediaUrl(urlRef.current);
+      urlRef.current = null;
+    }
+    setPreviewUrl(null);
+  };
+
+  useEffect(() => {
+    if (previewUrl && videoRef.current) {
+      videoRef.current.play().catch(() => undefined);
+    }
+  }, [previewUrl]);
+
+  // Release on unmount.
+  useEffect(
+    () => () => {
+      if (urlRef.current) revokeMediaUrl(urlRef.current);
+    },
+    [],
+  );
+
+  return { previewUrl, videoRef, startPreview, stopPreview };
+}
+
 function LibraryCard({
   item,
   index,
@@ -155,6 +205,7 @@ function LibraryCard({
 }) {
   const [renaming, setRenaming] = useState(false);
   const src = thumbUrl ?? item.path;
+  const { previewUrl, videoRef, startPreview, stopPreview } = useHoverPreview(item);
 
   const subline = [
     item.source.toUpperCase(),
@@ -195,6 +246,8 @@ function LibraryCard({
         className="relative aspect-video w-full cursor-pointer overflow-hidden bg-void"
         onClick={(e) => h.onToggleSelect(item, e.shiftKey)}
         onDoubleClick={() => h.onOpenDetail(item)}
+        onMouseEnter={startPreview}
+        onMouseLeave={stopPreview}
       >
         {src ? (
           <img
@@ -205,6 +258,19 @@ function LibraryCard({
           />
         ) : (
           <div className="h-full w-full animate-shimmer shimmer" />
+        )}
+
+        {/* Hover video preview (muted loop) */}
+        {previewUrl && (
+          <video
+            ref={videoRef}
+            src={previewUrl}
+            muted
+            loop
+            playsInline
+            preload="auto"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
         )}
 
         {/* Dome-master badge */}
