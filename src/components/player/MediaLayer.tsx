@@ -12,10 +12,14 @@ interface MediaLayerProps {
   slot: LayerSlot;
   active: boolean;
   transitionMs: number;
+  /** Videos start muted (autoplay-safe); the transport bar toggles this. */
+  muted: boolean;
   /** Register/unregister this layer's video element as the active one (owner = slot key). */
   registerVideo: (el: HTMLVideoElement | null, owner: number) => void;
   onVideoEnded: () => void;
   onVideoPlayState: (paused: boolean) => void;
+  /** The active video failed to load/play — Player decides how to recover. */
+  onVideoError: () => void;
 }
 
 /**
@@ -26,9 +30,11 @@ function MediaLayerInner({
   slot,
   active,
   transitionMs,
+  muted,
   registerVideo,
   onVideoEnded,
   onVideoPlayState,
+  onVideoError,
 }: MediaLayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const activeRef = useRef(active);
@@ -43,14 +49,21 @@ function MediaLayerInner({
     if (!v) return;
     if (active) {
       registerVideo(v, owner);
-      v.play().catch(() => {
-        /* autoplay may be blocked before a user gesture */
+      v.play().catch((err: unknown) => {
+        // AbortError = our own pause()/src swap interrupted play — not a failure.
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (activeRef.current) onVideoError();
       });
     } else {
       v.pause();
       registerVideo(null, owner);
     }
-  }, [active, owner, registerVideo]);
+  }, [active, owner, registerVideo, onVideoError]);
+
+  // Live mute/unmute on the active element (prop alone only sets initial state).
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted;
+  }, [muted]);
 
   // Unregister on unmount (only if we still own the active slot).
   useEffect(() => {
@@ -80,9 +93,13 @@ function MediaLayerInner({
           src={url}
           className="max-h-full max-w-full object-contain"
           playsInline
+          muted={muted}
           preload="auto"
           onEnded={() => {
             if (activeRef.current) onVideoEnded();
+          }}
+          onError={() => {
+            if (activeRef.current) onVideoError();
           }}
           onPlay={() => {
             if (activeRef.current) onVideoPlayState(false);

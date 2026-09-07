@@ -154,6 +154,54 @@ function StageHud({ mode, hudKey, item, index, count, nextItem, getVideoInfo }: 
   );
 }
 
+/* --------------------------- Item progress bar ------------------------------ */
+/* Thin gold line pinned to the bottom edge of the stage. Runs its own rAF loop
+   (images: wall-clock against the configured hold; videos: element position)
+   and renders in normal + present mode, in AUTO and for videos in MANUAL. */
+
+function ItemProgressBar({
+  mode,
+  hudKey,
+  item,
+  getVideoInfo,
+}: {
+  mode: PlayerMode;
+  hudKey: number;
+  item: QueueItem;
+  getVideoInfo: () => { progress: number; remaining: number };
+}) {
+  const isVideo = item.media.type === 'video';
+  const durationSec = imageDurationSec(item);
+  const active = mode === 'auto' || isVideo;
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      if (isVideo) {
+        setProgress(Math.min(1, Math.max(0, getVideoInfo().progress)));
+      } else {
+        setProgress(Math.min(1, (now - start) / Math.max(1, durationSec * 1000)));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active, hudKey, isVideo, durationSec, getVideoInfo]);
+
+  if (!active) return null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[2px] bg-void/60">
+      <div
+        className="h-full bg-gold shadow-glow-gold"
+        style={{ width: `${progress * 100}%` }}
+      />
+    </div>
+  );
+}
+
 /* ------------------------------- Empty state -------------------------------- */
 
 function DomeWireframe() {
@@ -185,10 +233,12 @@ export interface StageProps {
   nextItem: QueueItem | null;
   autoHalted: boolean;
   present: boolean;
+  muted: boolean;
   getVideoInfo: () => { progress: number; remaining: number };
   registerVideo: (el: HTMLVideoElement | null, owner: number) => void;
   onVideoEnded: () => void;
   onVideoPlayState: (paused: boolean) => void;
+  onVideoError: () => void;
   onCycleTransition: () => void;
   onAdvance: () => void;
   onPrev: () => void;
@@ -211,10 +261,12 @@ export default function Stage({
   nextItem,
   autoHalted,
   present,
+  muted,
   getVideoInfo,
   registerVideo,
   onVideoEnded,
   onVideoPlayState,
+  onVideoError,
   onCycleTransition,
   onAdvance,
   onPrev,
@@ -287,12 +339,49 @@ export default function Stage({
             slot={slot}
             active={i === activeLayer}
             transitionMs={transitionMs}
+            muted={muted}
             registerVideo={registerVideo}
             onVideoEnded={onVideoEnded}
             onVideoPlayState={onVideoPlayState}
+            onVideoError={onVideoError}
           />
         ))}
       </div>
+
+      {/* Per-item progress — thin gold line along the bottom edge */}
+      {currentItem && (
+        <ItemProgressBar
+          mode={mode}
+          hudKey={activeKey}
+          item={currentItem}
+          getVideoInfo={getVideoInfo}
+        />
+      )}
+
+      {/* Present mode: cinematic film grain + vignette (CSS only, non-interactive) */}
+      {present && (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-[34]"
+            style={{
+              background:
+                'radial-gradient(ellipse at center, transparent 52%, rgba(3,1,10,0.42) 82%, rgba(3,1,10,0.78) 100%)',
+            }}
+          />
+          <motion.div
+            aria-hidden
+            initial={false}
+            animate={{ x: [0, -9, 7, -4, 0], y: [0, 6, -8, 4, 0] }}
+            transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
+            className="pointer-events-none absolute -inset-4 z-[34] opacity-[0.055] mix-blend-screen"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")`,
+              backgroundSize: '160px 160px',
+            }}
+          />
+        </>
+      )}
 
       {/* Fade-from-black overlay on present enter */}
       {intro && (

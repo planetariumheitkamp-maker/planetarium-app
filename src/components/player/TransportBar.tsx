@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Pause, Play, Repeat, SkipBack } from 'lucide-react';
+import { Minus, Pause, Play, Plus, Repeat, SkipBack, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PlayerMode } from './Stage';
 
@@ -20,6 +20,12 @@ interface TransportBarProps {
   isVideo: boolean;
   videoPaused: boolean;
   onToggleVideo: () => void;
+  /** Videos start muted (autoplay-safe); user can unmute here. */
+  muted: boolean;
+  onToggleMute: () => void;
+  /** Default hold time for images without an override (persisted). */
+  imageDurationSec: number;
+  onImageDurationChange: (delta: number) => void;
   loop: boolean;
   onToggleLoop: () => void;
   runtimeSec: number;
@@ -42,6 +48,10 @@ export default function TransportBar({
   isVideo,
   videoPaused,
   onToggleVideo,
+  muted,
+  onToggleMute,
+  imageDurationSec,
+  onImageDurationChange,
   loop,
   onToggleLoop,
   runtimeSec,
@@ -148,6 +158,33 @@ export default function TransportBar({
           )}
         </button>
 
+        {/* Video mute/unmute (videos start muted so autoplay is never blocked) */}
+        <button
+          type="button"
+          onClick={onToggleMute}
+          disabled={!isVideo}
+          title={
+            isVideo
+              ? muted
+                ? 'Unmute video (M)'
+                : 'Mute video (M)'
+              : 'Mute / unmute (video items only)'
+          }
+          aria-pressed={!muted}
+          className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-full border transition-all duration-200 ease-orbital disabled:pointer-events-none disabled:opacity-30',
+            isVideo && !muted
+              ? 'border-gold/60 text-gold shadow-glow-gold'
+              : 'border-line text-ink-dim hover:border-violet-hi hover:text-ink hover:shadow-glow-violet',
+          )}
+        >
+          {muted ? (
+            <VolumeX className="h-4 w-4" strokeWidth={1.75} />
+          ) : (
+            <Volume2 className="h-4 w-4" strokeWidth={1.75} />
+          )}
+        </button>
+
         {/* Loop toggle */}
         <button
           type="button"
@@ -165,8 +202,32 @@ export default function TransportBar({
         </button>
       </div>
 
-      {/* Right: runtime estimate + elapsed show timer */}
+      {/* Right: default image hold + runtime estimate + elapsed show timer */}
       <div className="flex items-center gap-4 font-mono text-xs tabular-nums">
+        <div
+          className="glass-panel flex items-center gap-0.5 rounded-full px-1 py-0.5"
+          title="Default image hold time in AUTO mode (persisted)"
+        >
+          <button
+            type="button"
+            title="Shorter default image hold (−1s)"
+            onClick={() => onImageDurationChange(-1)}
+            className="flex h-5 w-5 items-center justify-center rounded-full text-ink-dim transition-colors hover:text-gold"
+          >
+            <Minus className="h-3 w-3" />
+          </button>
+          <span className="whitespace-nowrap px-1 text-[10px] text-ink-faint">
+            IMG <span className="text-gold">{imageDurationSec}s</span>
+          </span>
+          <button
+            type="button"
+            title="Longer default image hold (+1s)"
+            onClick={() => onImageDurationChange(1)}
+            className="flex h-5 w-5 items-center justify-center rounded-full text-ink-dim transition-colors hover:text-gold"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        </div>
         <span className="text-gold">SHOW {fmtShow(runtimeSec)}</span>
         <span className="text-ink-dim">ELAPSED {fmtShow(elapsedSec)}</span>
       </div>

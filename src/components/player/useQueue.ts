@@ -53,38 +53,121 @@ export const MIN_IMAGE_DURATION = 2;
 export const MAX_IMAGE_DURATION = 60;
 export const DEFAULT_IMAGE_DURATION = 8;
 
-export function imageDurationSec(item: QueueItem): number {
-  return item.entry.durationOverride ?? item.media.duration ?? DEFAULT_IMAGE_DURATION;
+const IMAGE_DURATION_KEY = 'domemaster.player.imageDuration';
+
+/** Session-wide default image duration (persisted); per-entry/media values win. */
+let defaultImageDurationSec = (() => {
+  try {
+    const raw = localStorage.getItem(IMAGE_DURATION_KEY);
+    const n = raw === null ? NaN : Number(raw);
+    if (Number.isFinite(n)) {
+      return Math.min(MAX_IMAGE_DURATION, Math.max(MIN_IMAGE_DURATION, Math.round(n)));
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return DEFAULT_IMAGE_DURATION;
+})();
+
+export function getDefaultImageDuration(): number {
+  return defaultImageDurationSec;
 }
+
+export function setDefaultImageDuration(seconds: number): number {
+  defaultImageDurationSec = Math.min(
+    MAX_IMAGE_DURATION,
+    Math.max(MIN_IMAGE_DURATION, Math.round(seconds)),
+  );
+  try {
+    localStorage.setItem(IMAGE_DURATION_KEY, String(defaultImageDurationSec));
+  } catch {
+    /* storage unavailable */
+  }
+  return defaultImageDurationSec;
+}
+
+export function imageDurationSec(item: QueueItem): number {
+  return item.entry.durationOverride ?? item.media.duration ?? defaultImageDurationSec;
+}
+
+interface ResolvedUrls {
+  url: string;
+  thumbUrl: string;
+}
+
+/** Delay before revoking object URLs that dropped out of the queue — long
+    enough for any in-flight crossfade (max 2.5s + buffer) to finish. */
+const RETIRE_MS = 5000;
 
 export function useQueue() {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
-  // Every URL ever resolved this session; revoked only on unmount so an
-  // in-flight video stream is never cut by a reload.
-  const urlsRef = useRef<string[]>([]);
+  // Resolved URLs cached per media identity (id + updatedAt) so reloads don't
+  // mint duplicate object URLs for the same blob (the old leak). Entries that
+  // fall out of the queue are retired and revoked after a grace period.
+  const cacheRef = useRef(new Map<string, ResolvedUrls>());
+  const retireRef = useRef(new Map<string, ResolvedUrls>());
+  const retireTimerRef = useRef<number | undefined>(undefined);
   const itemsRef = useRef<QueueItem[]>([]);
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
+  const flushRetired = useCallback(() => {
+    retireRef.current.forEach((r) => {
+      revokeMediaUrl(r.url);
+      revokeMediaUrl(r.thumbUrl);
+    });
+    retireRef.current.clear();
+  }, []);
+
   const reload = useCallback(async () => {
     const [entries, media] = await Promise.all([getPlaylist(), getAllMedia()]);
     const byId = new Map(media.map((m) => [m.id, m]));
+    const cache = cacheRef.current;
+    const retire = retireRef.current;
+    const usedKeys = new Set<string>();
     const next: QueueItem[] = [];
     for (const entry of entries) {
       const m = byId.get(entry.mediaId);
       if (!m) continue;
-      const [url, thumbUrl] = await Promise.all([
-        resolveMediaUrl(m),
-        resolveThumbnailUrl(m),
-      ]);
-      urlsRef.current.push(url, thumbUrl);
-      next.push({ entry, media: m, url, thumbUrl });
+      const key = `${m.id}:${m.updatedAt}`;
+      usedKeys.add(key);
+      let resolved = cache.get(key);
+      if (!resolved) {
+        // Resurrect from the retire pool when possible (avoids re-minting).
+        resolved = retire.get(key);
+        if (resolved) {
+          retire.delete(key);
+          cache.set(key, resolved);
+        }
+      }
+      if (!resolved) {
+        const [url, thumbUrl] = await Promise.all([
+          resolveMediaUrl(m),
+          resolveThumbnailUrl(m),
+        ]);
+        resolved = { url, thumbUrl };
+        cache.set(key, resolved);
+      }
+      next.push({ entry, media: m, url: resolved.url, thumbUrl: resolved.thumbUrl });
+    }
+    // Move unreferenced entries to the retire pool (revoked after RETIRE_MS,
+    // so an outgoing layer is never cut mid-crossfade). Static bundled paths
+    // are unaffected — revokeMediaUrl only touches blob: URLs.
+    cache.forEach((r, key) => {
+      if (!usedKeys.has(key)) {
+        retire.set(key, r);
+        cache.delete(key);
+      }
+    });
+    window.clearTimeout(retireTimerRef.current);
+    if (retire.size > 0) {
+      retireTimerRef.current = window.setTimeout(flushRetired, RETIRE_MS);
     }
     setItems(next);
     setLoading(false);
-  }, []);
+  }, [flushRetired]);
 
   useEffect(() => {
     // Deferred to a macrotask: data-load effect (setState happens async after IDB resolves).
@@ -94,12 +177,31 @@ export function useQueue() {
         setLoading(false);
       });
     }, 0);
+    // Refresh the queue when the tab regains focus / becomes visible again so
+    // playlist edits made elsewhere (Library, another tab) show up without a
+    // manual reload.
+    const onFocus = () => {
+      reload().catch((err) => console.error('[player] focus reload failed', err));
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') onFocus();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    const cache = cacheRef.current;
     return () => {
       window.clearTimeout(t);
-      urlsRef.current.forEach(revokeMediaUrl);
-      urlsRef.current = [];
+      window.clearTimeout(retireTimerRef.current);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      cache.forEach((r) => {
+        revokeMediaUrl(r.url);
+        revokeMediaUrl(r.thumbUrl);
+      });
+      cache.clear();
+      flushRetired();
     };
-  }, [reload]);
+  }, [reload, flushRetired]);
 
   /** Persist a new entry order (ids = playlist entry ids). */
   const reorder = useCallback(async (ids: string[]) => {

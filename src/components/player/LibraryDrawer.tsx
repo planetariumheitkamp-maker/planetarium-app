@@ -30,16 +30,26 @@ export default function LibraryDrawer({ open, onClose, onAdd }: LibraryDrawerPro
     (async () => {
       const media = await getAllMedia();
       const resolved: DrawerItem[] = [];
+      const fresh: string[] = [];
       for (const m of media) {
         try {
           const thumbUrl = await resolveThumbnailUrl(m);
-          urlsRef.current.push(thumbUrl);
+          fresh.push(thumbUrl);
           resolved.push({ media: m, thumbUrl });
         } catch {
           /* skip unresolvable items */
         }
       }
-      if (!cancelled) setItems(resolved);
+      if (cancelled) {
+        fresh.forEach(revokeMediaUrl);
+        return;
+      }
+      // Swap in the new set, then release the previous one (no per-open leak;
+      // static bundled paths are ignored by revokeMediaUrl).
+      const stale = urlsRef.current;
+      urlsRef.current = fresh;
+      setItems(resolved);
+      stale.forEach(revokeMediaUrl);
     })().catch(() => setItems([]));
     return () => {
       cancelled = true;
