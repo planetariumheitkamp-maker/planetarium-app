@@ -1,6 +1,5 @@
-import { useRef, useState } from 'react';
-import type { RefObject } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router';
 import DomeWireframe from '@/components/editor/DomeWireframe';
@@ -24,6 +23,7 @@ export default function FisheyeStage({
   params,
   onDragDelta,
   sourceKey,
+  sourceChip,
   hasSource,
   resolution,
   onCycleResolution,
@@ -31,11 +31,18 @@ export default function FisheyeStage({
   webglError,
   onQuickSample,
 }: {
-  canvasRef: RefObject<HTMLCanvasElement | null>;
+  /**
+   * Callback ref — the Editor owns the WebGL renderer and (re)binds it
+   * whenever the canvas node changes, so this element must never be
+   * force-remounted via `key`.
+   */
+  canvasRef: (node: HTMLCanvasElement | null) => void;
   params: FisheyeParams;
   /** (dx, dy, shift) — drag adjusts azimuth/tilt; shift-drag adjusts offset */
   onDragDelta: (dx: number, dy: number, shift: boolean) => void;
   sourceKey: string;
+  /** Preformatted mono chip, e.g. `EARTH.JPG · 2048×1024 · IMG` */
+  sourceChip: string | null;
   hasSource: boolean;
   resolution: number;
   onCycleResolution: () => void;
@@ -45,6 +52,17 @@ export default function FisheyeStage({
 }) {
   const [dragging, setDragging] = useState(false);
   const lastRef = useRef<{ x: number; y: number } | null>(null);
+
+  /* Drag hint — shown once, the first time a source loads, fading after 3s. */
+  const [showHint, setShowHint] = useState(false);
+  const hintShownRef = useRef(false);
+  useEffect(() => {
+    if (!hasSource || hintShownRef.current) return;
+    hintShownRef.current = true;
+    setShowHint(true);
+    const t = window.setTimeout(() => setShowHint(false), 3000);
+    return () => window.clearTimeout(t);
+  }, [hasSource]);
 
   const size = 'min(70vh, 70vw)';
 
@@ -73,8 +91,10 @@ export default function FisheyeStage({
           </Link>
         </div>
       ) : (
+        // NOTE: no `key` here — remounting this subtree would detach the
+        // canvas node the Editor's FisheyeRenderer renders into (black stage).
+        // Source-change feedback is done with the keyed flash overlay below.
         <motion.div
-          key={sourceKey}
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
@@ -123,6 +143,15 @@ export default function FisheyeStage({
           {/* Dome wireframe overlay */}
           <DomeWireframe visible={params.wireframe} />
 
+          {/* Source-change flash: keyed overlay fades out, canvas stays put */}
+          <motion.div
+            key={sourceKey}
+            initial={{ opacity: 0.85 }}
+            animate={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-none absolute inset-0 z-30 rounded-2xl bg-void"
+          />
+
           {/* REC chip */}
           {rec && (
             <div className="glass-panel absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full px-3 py-1.5">
@@ -135,6 +164,32 @@ export default function FisheyeStage({
               </span>
             </div>
           )}
+
+          {/* Source info chip */}
+          {sourceChip && (
+            <div className="glass-panel absolute right-3 top-3 z-10 max-w-[70%] rounded-lg px-3 py-1.5">
+              <span className="block truncate font-mono text-[10px] uppercase tracking-wider text-ink-dim">
+                {sourceChip}
+              </span>
+            </div>
+          )}
+
+          {/* Drag hint — first source load only, fades after 3s */}
+          <AnimatePresence>
+            {showHint && hasSource && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                className="glass-panel pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 rounded-full px-4 py-2"
+              >
+                <span className="whitespace-nowrap font-mono text-[10px] uppercase tracking-widest text-gold">
+                  Drag to aim · Shift+drag = offset
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* HUD: live parameter readout */}
           <div className="glass-panel absolute bottom-3 left-3 z-10 rounded-lg px-3 py-1.5">

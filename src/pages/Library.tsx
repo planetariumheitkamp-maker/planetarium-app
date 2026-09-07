@@ -32,8 +32,25 @@ import { useThumbs } from '@/components/library/useThumbs';
 import { buildImportedItem, useCountUp } from '@/components/library/utils';
 
 const VIEW_KEY = 'domemaster.library.view';
+const SORT_KEY = 'domemaster.library.sort';
+const TAB_KEY = 'domemaster.library.tab';
 const WELCOME_KEY = 'domemaster.library.welcomeDismissed';
 const UNDO_WINDOW_MS = 5000;
+const STORAGE_WARN_RATIO = 0.8;
+const STORAGE_RECOVER_RATIO = 0.7;
+
+const VALID_SORTS: SortKey[] = ['newest', 'name', 'duration', 'size'];
+const VALID_TABS: SourceTab[] = ['all', 'imported', 'bundled', 'render'];
+
+function readPersisted<T extends string>(key: string, valid: T[], fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw && (valid as string[]).includes(raw)) return raw as T;
+  } catch {
+    /* storage unavailable */
+  }
+  return fallback;
+}
 
 interface PendingDelete {
   items: MediaItem[];
@@ -47,10 +64,10 @@ export default function Library() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [usage, setUsage] = useState<StorageUsage>({ usage: 0, quota: 0, ratio: 0 });
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<SourceTab>('all');
+  const [tab, setTab] = useState<SourceTab>(() => readPersisted(TAB_KEY, VALID_TABS, 'all'));
   const [showImages, setShowImages] = useState(true);
   const [showVideos, setShowVideos] = useState(true);
-  const [sort, setSort] = useState<SortKey>('newest');
+  const [sort, setSort] = useState<SortKey>(() => readPersisted(SORT_KEY, VALID_SORTS, 'newest'));
   const [view, setView] = useState<ViewMode>(() =>
     typeof localStorage !== 'undefined' && localStorage.getItem(VIEW_KEY) === 'list'
       ? 'list'
@@ -90,6 +107,27 @@ export default function Library() {
   useEffect(() => {
     localStorage.setItem(VIEW_KEY, view);
   }, [view]);
+
+  useEffect(() => {
+    localStorage.setItem(SORT_KEY, sort);
+  }, [sort]);
+
+  useEffect(() => {
+    localStorage.setItem(TAB_KEY, tab);
+  }, [tab]);
+
+  /* Storage pressure warning: fire once per crossing of the 80% threshold. */
+  const storageWarnedRef = useRef(false);
+  useEffect(() => {
+    if (usage.ratio >= STORAGE_WARN_RATIO) {
+      if (!storageWarnedRef.current) {
+        storageWarnedRef.current = true;
+        toast('Vault storage above 80% — consider clearing imported media', 'danger');
+      }
+    } else if (usage.ratio < STORAGE_RECOVER_RATIO) {
+      storageWarnedRef.current = false;
+    }
+  }, [usage, toast]);
 
   // Commit any pending delete on unmount.
   useEffect(() => {
@@ -295,6 +333,21 @@ export default function Library() {
     () => filtered.filter((m) => selectedIds.has(m.id)),
     [filtered, selectedIds],
   );
+
+  /** Export the selection (or everything visible) one file at a time —
+      sequential + staggered so the browser doesn't suppress multi-downloads. */
+  const handleExportAll = useCallback(async () => {
+    const list = selectedItems.length > 0 ? selectedItems : filtered;
+    if (list.length === 0) return;
+    toast(
+      list.length === 1 ? 'Exporting 1 item…' : `Exporting ${list.length} items one by one…`,
+      'success',
+    );
+    for (const m of list) {
+      await handleDownload(m);
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    }
+  }, [selectedItems, filtered, handleDownload, toast]);
 
   const clearImported = useCallback(async () => {
     const victims = items.filter((m) => m.source !== 'bundled');
@@ -509,7 +562,7 @@ export default function Library() {
             'success',
           );
         }}
-        onDownloadAll={() => selectedItems.forEach((m) => void handleDownload(m))}
+        onDownloadAll={() => void handleExportAll()}
         onDeleteAll={() => softDelete(selectedItems)}
         onClear={() => setSelectedIds(new Set())}
       />

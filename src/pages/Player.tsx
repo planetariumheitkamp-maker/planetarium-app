@@ -10,10 +10,33 @@ import type { LayerSlot } from '@/components/player/MediaLayer';
 import PlaylistRail from '@/components/player/PlaylistRail';
 import LibraryDrawer from '@/components/player/LibraryDrawer';
 import TransportBar from '@/components/player/TransportBar';
-import { useQueue, imageDurationSec } from '@/components/player/useQueue';
+import {
+  useQueue,
+  getDefaultImageDuration,
+  imageDurationSec,
+  setDefaultImageDuration,
+} from '@/components/player/useQueue';
 import type { QueueItem } from '@/components/player/useQueue';
 
 const TRANSITION_PRESETS = [500, 1200, 2500] as const;
+
+const SETTINGS_KEY = 'domemaster.player.settings';
+
+interface PlayerSettings {
+  mode?: PlayerMode;
+  loop?: boolean;
+  transitionMs?: number;
+}
+
+function loadSettings(): PlayerSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return JSON.parse(raw) as PlayerSettings;
+  } catch {
+    /* storage unavailable / corrupt */
+  }
+  return {};
+}
 
 const pad = (n: number) => String(Math.max(0, n)).padStart(2, '0');
 
@@ -33,9 +56,18 @@ export default function Player() {
   const queue = useQueue();
   const { items, loading } = queue;
 
-  const [mode, setMode] = useState<PlayerMode>('auto');
-  const [loop, setLoop] = useState(true);
-  const [transitionMs, setTransitionMs] = useState<number>(1200);
+  const [mode, setMode] = useState<PlayerMode>(() =>
+    loadSettings().mode === 'manual' ? 'manual' : 'auto',
+  );
+  const [loop, setLoop] = useState(() => loadSettings().loop !== false);
+  const [transitionMs, setTransitionMs] = useState<number>(() => {
+    const saved = loadSettings().transitionMs;
+    return TRANSITION_PRESETS.includes(saved as (typeof TRANSITION_PRESETS)[number])
+      ? (saved as number)
+      : 1200;
+  });
+  const [imageDuration, setImageDuration] = useState(() => getDefaultImageDuration());
+  const [muted, setMuted] = useState(true);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [layers, setLayers] = useState<[LayerSlot, LayerSlot]>(EMPTY_LAYERS);
   const [activeLayer, setActiveLayer] = useState<0 | 1>(0);
@@ -63,6 +95,15 @@ export default function Player() {
     modeRef.current = mode;
     activeLayerRef.current = activeLayer;
   }, [items, currentId, loop, mode, activeLayer]);
+
+  /* Persist player settings (mode / loop / transition preset). */
+  useEffect(() => {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ mode, loop, transitionMs }));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [mode, loop, transitionMs]);
 
   /* ------------------------------ crossfade engine ----------------------------- */
 
@@ -115,7 +156,16 @@ export default function Player() {
         if (!loopRef.current) return;
         next = list.length - 1;
       }
-      if (next === cur) return;
+      if (next === cur) {
+        // Single-item queue with loop on: replay a video instead of stalling.
+        const v = activeVideoRef.current;
+        if (list.length === 1 && loopRef.current && v && list[cur].media.type === 'video') {
+          v.currentTime = 0;
+          v.play().catch(() => {});
+          setElapsedSec(0);
+        }
+        return;
+      }
       setAutoHalted(false);
       showItem(list[next]);
     },
@@ -201,6 +251,38 @@ export default function Player() {
     if (!v) return;
     if (v.paused) v.play().catch(() => {});
     else v.pause();
+  }, []);
+
+  // A video failed to load/play. In AUTO the show must go on: skip it after a
+  // short beat so a broken file never freezes auto-advance. In MANUAL just
+  // surface the problem and stay put.
+  const skipTimerRef = useRef<number | undefined>(undefined);
+  const handleVideoError = useCallback(() => {
+    const name = itemsRef.current.find(
+      (i) => i.entry.id === currentIdRef.current,
+    )?.media.name;
+    if (modeRef.current !== 'auto') {
+      toast(`Cannot play “${name ?? 'video'}”`, 'danger');
+      setVideoPaused(true);
+      return;
+    }
+    toast(`Skipping unplayable video${name ? ` “${name}”` : ''}`, 'danger');
+    window.clearTimeout(skipTimerRef.current);
+    skipTimerRef.current = window.setTimeout(() => navigateBy(1), 1200);
+  }, [navigateBy, toast]);
+  useEffect(() => () => window.clearTimeout(skipTimerRef.current), []);
+
+  const toggleMute = useCallback(() => {
+    setMuted((m) => {
+      const next = !m;
+      const v = activeVideoRef.current;
+      if (v) v.muted = next;
+      return next;
+    });
+  }, []);
+
+  const changeImageDuration = useCallback((delta: number) => {
+    setImageDuration(setDefaultImageDuration(getDefaultImageDuration() + delta));
   }, []);
 
   /* ------------------------------- mode / presets -------------------------------- */
@@ -295,6 +377,10 @@ export default function Player() {
         case 'L':
           setLoop((l) => !l);
           break;
+        case 'm':
+        case 'M':
+          if (cur?.media.type === 'video') toggleMute();
+          break;
         case 'Escape':
           if (present && !document.fullscreenElement) exitPresent();
           break;
@@ -302,7 +388,7 @@ export default function Player() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [navigateBy, toggleVideo, togglePresent, toggleMode, present, exitPresent]);
+  }, [navigateBy, toggleVideo, togglePresent, toggleMode, toggleMute, present, exitPresent]);
 
   /* --------------------------------- queue actions ------------------------------- */
 
@@ -351,6 +437,30 @@ export default function Player() {
   );
 
   const autoRunning = mode === 'auto' && !autoHalted && currentItem !== null;
+
+  /* Preload the NEXT item so crossfades never flash black. */
+  const nextItemId = nextItem?.entry.id ?? null;
+  useEffect(() => {
+    if (!nextItem) return;
+    if (nextItem.media.type === 'image') {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = nextItem.url;
+      return () => {
+        img.src = '';
+      };
+    }
+    const v = document.createElement('video');
+    v.preload = 'auto';
+    v.muted = true;
+    v.src = nextItem.url;
+    v.load();
+    return () => {
+      v.removeAttribute('src');
+      v.load();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextItemId]);
 
   /* ------------------------------------ render ----------------------------------- */
 
@@ -434,10 +544,12 @@ export default function Player() {
             nextItem={nextItem}
             autoHalted={autoHalted}
             present={present}
+            muted={muted}
             getVideoInfo={getVideoInfo}
             registerVideo={registerVideo}
             onVideoEnded={handleVideoEnded}
             onVideoPlayState={setVideoPaused}
+            onVideoError={handleVideoError}
             onCycleTransition={cycleTransition}
             onAdvance={() => navigateBy(1)}
             onPrev={() => navigateBy(-1)}
@@ -462,6 +574,10 @@ export default function Player() {
             isVideo={currentItem?.media.type === 'video'}
             videoPaused={videoPaused}
             onToggleVideo={toggleVideo}
+            muted={muted}
+            onToggleMute={toggleMute}
+            imageDurationSec={imageDuration}
+            onImageDurationChange={changeImageDuration}
             loop={loop}
             onToggleLoop={() => setLoop((l) => !l)}
             runtimeSec={runtimeSec}

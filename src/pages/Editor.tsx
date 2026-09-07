@@ -6,7 +6,7 @@ import SourcePanel from '@/components/editor/SourcePanel';
 import FisheyeStage from '@/components/editor/FisheyeStage';
 import type { RecState } from '@/components/editor/FisheyeStage';
 import ControlDeck from '@/components/editor/ControlDeck';
-import type { ExportResolution } from '@/components/editor/ControlDeck';
+import type { ExportResolution, ExportFormat } from '@/components/editor/ControlDeck';
 import { GhostButton, GoldButton, useToast } from '@/components/primitives';
 import {
   Dialog,
@@ -24,7 +24,7 @@ import {
   makeThumbnailBlob,
   paramsEqual,
   pickRecorderMimeType,
-  renderPngBlob,
+  renderFrameBlob,
   tweenParams,
 } from '@/lib/fisheye';
 import type { RenderState } from '@/lib/fisheye';
@@ -33,9 +33,33 @@ import { cn } from '@/lib/utils';
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const RES_CYCLE: ExportResolution[] = [1024, 1536, 2048];
 
+const LS_PARAMS = 'domemaster:editorParams';
+const LS_LAST_SOURCE = 'domemaster:lastSource';
+
+/** Restore persisted editor params, falling back to defaults. */
+function loadStoredParams(): FisheyeParams {
+  try {
+    const raw = localStorage.getItem(LS_PARAMS);
+    if (raw) return { ...DEFAULT_PARAMS, ...(JSON.parse(raw) as Partial<FisheyeParams>) };
+  } catch {
+    /* storage unavailable or corrupt */
+  }
+  return { ...DEFAULT_PARAMS };
+}
+
+/** Display filename for the source chip (bundled path, File name, or title). */
+function sourceFileName(item: MediaItem): string {
+  const fromPath = item.path?.split('/').pop();
+  if (fromPath) return fromPath;
+  if (item.blob instanceof File && item.blob.name) return item.blob.name;
+  return item.name;
+}
+
 interface SourceInfo {
   item: MediaItem | null;
   name: string;
+  /** Filename with extension, e.g. `earth.jpg` — shown on the stage chip. */
+  fileName: string;
   type: 'image' | 'video';
   width: number;
   height: number;
@@ -48,11 +72,14 @@ export default function Editor() {
 
   /* ------------------------------ core state ------------------------------ */
   const [media, setMedia] = useState<MediaItem[]>([]);
-  const [params, setParams] = useState<FisheyeParams>({ ...DEFAULT_PARAMS });
+  const [params, setParams] = useState<FisheyeParams>(loadStoredParams);
   const [horizonMask, setHorizonMask] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [resolution, setResolution] = useState<ExportResolution>(1024);
-  const [activePresetId, setActivePresetId] = useState<string | null>('dome180');
+  const [format, setFormat] = useState<ExportFormat>('png');
+  const [activePresetId, setActivePresetId] = useState<string | null>(() =>
+    paramsEqual(loadStoredParams(), DEFAULT_PARAMS) ? 'dome180' : null,
+  );
   const [source, setSource] = useState<SourceInfo | null>(null);
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [webglError, setWebglError] = useState<string | null>(null);
@@ -71,10 +98,14 @@ export default function Editor() {
   const horizonMaskRef = useRef(horizonMask);
   const comparingRef = useRef(comparing);
   const sourceRef = useRef<SourceInfo | null>(null);
+  const mediaRef = useRef<MediaItem[]>(media);
+  /** Sources that failed to decode this session — never auto-picked again. */
+  const failedSourceIdsRef = useRef<Set<string>>(new Set());
   paramsRef.current = params;
   horizonMaskRef.current = horizonMask;
   comparingRef.current = comparing;
   sourceRef.current = source;
+  mediaRef.current = media;
 
   const refreshMedia = useCallback(async () => {
     try {
@@ -89,18 +120,44 @@ export default function Editor() {
     void refreshMedia();
   }, [refreshMedia]);
 
-  /* --------------------------- renderer + loop ---------------------------- */
+  /* Persist editor params so a reload restores the last framing. A render's
+     own fisheyeParams still override these when such an item is loaded. */
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    let renderer: FisheyeRenderer | null = null;
     try {
-      renderer = new FisheyeRenderer(canvas, () => setContextLost(true));
+      localStorage.setItem(LS_PARAMS, JSON.stringify(params));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [params]);
+
+  /* --------------------------- renderer + loop ---------------------------- */
+  /**
+   * Callback ref: (re)create the FisheyeRenderer whenever the canvas NODE
+   * changes, disposing the previous context. React calls this with `null` on
+   * detach and with the new node on attach, so the renderer can never end up
+   * bound to a detached canvas (the "black stage" bug).
+   */
+  const setCanvasNode = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node;
+    rendererRef.current?.dispose();
+    rendererRef.current = null;
+    if (!node) return;
+    try {
+      const renderer = new FisheyeRenderer(node, () => setContextLost(true));
       rendererRef.current = renderer;
+      setWebglError(null);
+      // Fresh GL context lost its texture — re-upload the current source.
+      const s = sourceRef.current;
+      if (s) {
+        const el = s.type === 'video' ? videoElRef.current : imageElRef.current;
+        if (el) renderer.uploadSource(el, s.width, s.height);
+      }
     } catch (err) {
       setWebglError(err instanceof Error ? err.message : 'context creation failed');
-      return;
     }
+  }, []);
+
+  useEffect(() => {
     let raf = 0;
     const loop = () => {
       const r = rendererRef.current;
@@ -117,11 +174,7 @@ export default function Editor() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => {
-      cancelAnimationFrame(raf);
-      rendererRef.current?.dispose();
-      rendererRef.current = null;
-    };
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   /* ------------------------------ source load ----------------------------- */
@@ -137,12 +190,52 @@ export default function Editor() {
         }
         if (sourceUrlRef.current) revokeMediaUrl(sourceUrlRef.current);
         sourceUrlRef.current = url;
+        try {
+          localStorage.setItem(LS_LAST_SOURCE, item.id);
+        } catch {
+          /* storage unavailable */
+        }
 
         // tear down previous media element
         videoElRef.current?.pause();
         videoElRef.current = null;
         setVideoEl(null);
         imageElRef.current = null;
+
+        const fileName = sourceFileName(item);
+
+        /** A newer load superseded this one while decoding — drop quietly. */
+        const isStale = () => sourceUrlRef.current !== url;
+
+        /** Decode failed — clear the stage, then fall back to another source. */
+        const failDecode = () => {
+          if (!isStale()) {
+            sourceUrlRef.current = null;
+            videoElRef.current = null;
+            imageElRef.current = null;
+            setVideoEl(null);
+            rendererRef.current?.clearTexture();
+            setSource(null);
+            // Never auto-pick this source again this session; if it was the
+            // persisted "last source", drop that pointer too.
+            failedSourceIdsRef.current.add(item.id);
+            try {
+              if (localStorage.getItem(LS_LAST_SOURCE) === item.id) {
+                localStorage.removeItem(LS_LAST_SOURCE);
+              }
+            } catch {
+              /* storage unavailable */
+            }
+            // Fall back to the first decodable candidate so the stage is
+            // not left empty.
+            const fallback = mediaRef.current.find(
+              (m) => m.id !== item.id && !failedSourceIdsRef.current.has(m.id),
+            );
+            if (fallback) loadSourceRef.current(fallback);
+          }
+          revokeMediaUrl(url);
+          toast(`Could not decode ${item.type} "${item.name}"`, 'danger');
+        };
 
         if (item.type === 'video') {
           const video = document.createElement('video');
@@ -154,12 +247,14 @@ export default function Editor() {
           video.addEventListener(
             'loadeddata',
             () => {
+              if (isStale()) return;
               rendererRef.current?.uploadSource(video, video.videoWidth, video.videoHeight);
               videoElRef.current = video;
               setVideoEl(video);
               setSource({
                 item,
                 name: item.name,
+                fileName,
                 type: 'video',
                 width: video.videoWidth,
                 height: video.videoHeight,
@@ -171,27 +266,25 @@ export default function Editor() {
             },
             { once: true },
           );
-          video.addEventListener(
-            'error',
-            () => toast(`Could not decode video "${item.name}"`, 'danger'),
-            { once: true },
-          );
+          video.addEventListener('error', failDecode, { once: true });
           video.load();
         } else {
           const img = new Image();
           img.onload = () => {
+            if (isStale()) return;
             rendererRef.current?.uploadSource(img, img.naturalWidth, img.naturalHeight);
             imageElRef.current = img;
             setSource({
               item,
               name: item.name,
+              fileName,
               type: 'image',
               width: img.naturalWidth,
               height: img.naturalHeight,
               restored: !!item.fisheyeParams,
             });
           };
-          img.onerror = () => toast(`Could not decode image "${item.name}"`, 'danger');
+          img.onerror = failDecode;
           img.src = url;
         }
 
@@ -207,6 +300,10 @@ export default function Editor() {
     [toast],
   );
 
+  // Self-reference so decode-failure fallback can trigger a follow-up load.
+  const loadSourceRef = useRef<(item: MediaItem) => void>(() => {});
+  loadSourceRef.current = loadSource;
+
   const loadQuickSample = useCallback(
     (path: string) => {
       const item = media.find((m) => m.path === path);
@@ -220,14 +317,26 @@ export default function Editor() {
   const pendingMediaIdRef = useRef<string | null>(
     (location.state as { mediaId?: string } | null)?.mediaId ?? null,
   );
+  const autoLoadTriedRef = useRef(false);
   useEffect(() => {
-    const id = pendingMediaIdRef.current;
-    if (!id || media.length === 0) return;
-    const item = media.find((m) => m.id === id);
-    if (item) {
-      pendingMediaIdRef.current = null;
-      loadSource(item);
+    if (media.length === 0 || sourceRef.current || autoLoadTriedRef.current) return;
+    autoLoadTriedRef.current = true;
+    // 1) explicit "open in editor" target
+    const pendingId = pendingMediaIdRef.current;
+    pendingMediaIdRef.current = null;
+    let item = pendingId ? media.find((m) => m.id === pendingId) : undefined;
+    // 2) last-used source from a previous session
+    if (!item) {
+      try {
+        const lastId = localStorage.getItem(LS_LAST_SOURCE);
+        if (lastId) item = media.find((m) => m.id === lastId);
+      } catch {
+        /* storage unavailable */
+      }
     }
+    // 3) first available item — the stage should never open empty
+    item ??= media[0];
+    if (item) loadSource(item);
   }, [media, loadSource]);
 
   /* -------------------------------- import -------------------------------- */
@@ -417,11 +526,12 @@ export default function Editor() {
       if (!src || exporting) return;
       setExporting('frame');
       try {
-        const blob = await renderPngBlob(src.el, src.w, src.h, resolution, currentRenderState());
+        const blob = await renderFrameBlob(src.el, src.w, src.h, resolution, currentRenderState(), format);
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const ext = format === 'jpeg' ? 'jpg' : 'png';
         const base = `${sourceRef.current?.name ?? 'dome'}-fisheye-${resolution}`;
         await saveRenderToVault(blob, 'image', `${base}`);
-        downloadBlob(blob, `${base}-${stamp}.png`);
+        downloadBlob(blob, `${base}-${stamp}.${ext}`);
         toast('Frame saved to Vault', 'success');
       } catch {
         toast('Frame export failed', 'danger');
@@ -429,7 +539,7 @@ export default function Editor() {
         setExporting(null);
       }
     })();
-  }, [exporting, getSourceElement, resolution, currentRenderState, saveRenderToVault, downloadBlob, toast]);
+  }, [exporting, getSourceElement, resolution, format, currentRenderState, saveRenderToVault, downloadBlob, toast]);
 
   /* ------------------------------ clip export ----------------------------- */
   const exportClip = useCallback(() => {
@@ -541,7 +651,7 @@ export default function Editor() {
       const src = getSourceElement();
       if (!src) return;
       try {
-        const blob = await renderPngBlob(src.el, src.w, src.h, resolution, currentRenderState());
+        const blob = await renderFrameBlob(src.el, src.w, src.h, resolution, currentRenderState(), format);
         const base = `${sourceRef.current?.name ?? 'dome'}-fisheye-${resolution}`;
         await saveRenderToVault(blob, 'image', base);
         toast('Render saved to Vault', 'success');
@@ -549,7 +659,7 @@ export default function Editor() {
         toast('Save failed', 'danger');
       }
     })();
-  }, [getSourceElement, resolution, currentRenderState, saveRenderToVault, toast]);
+  }, [getSourceElement, resolution, format, currentRenderState, saveRenderToVault, toast]);
 
   const sendToPlaylist = useCallback(() => {
     void (async () => {
@@ -598,6 +708,10 @@ export default function Editor() {
   }, [resetParams, exportFrame]);
 
   /* -------------------------------- render -------------------------------- */
+  const sourceChip = source
+    ? `${source.fileName.toUpperCase()} · ${source.width}×${source.height} · ${source.type === 'video' ? 'VID' : 'IMG'}`
+    : null;
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Zone 1 — editor sub-toolbar */}
@@ -702,10 +816,11 @@ export default function Editor() {
           className="flex min-w-0 flex-1"
         >
           <FisheyeStage
-            canvasRef={canvasRef}
+            canvasRef={setCanvasNode}
             params={params}
             onDragDelta={handleDragDelta}
             sourceKey={source?.item?.id ?? 'empty'}
+            sourceChip={sourceChip}
             hasSource={source !== null}
             resolution={resolution}
             onCycleResolution={() =>
@@ -733,6 +848,8 @@ export default function Editor() {
             onPreset={applyPreset}
             resolution={resolution}
             onResolution={setResolution}
+            format={format}
+            onFormat={setFormat}
             hasSource={source !== null}
             isVideo={source?.type === 'video'}
             exporting={exporting}

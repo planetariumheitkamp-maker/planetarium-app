@@ -7,6 +7,9 @@ import { FISHEYE_PRESETS } from '@/lib/fisheye';
 const RESOLUTIONS = [1024, 1536, 2048] as const;
 export type ExportResolution = (typeof RESOLUTIONS)[number];
 
+const FORMATS = ['png', 'jpeg'] as const;
+export type ExportFormat = (typeof FORMATS)[number];
+
 const deg = (v: number) => `${Math.round(v)}°`;
 const times = (v: number) => `${v.toFixed(2)}×`;
 const off = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`;
@@ -86,6 +89,8 @@ export default function ControlDeck({
   onPreset,
   resolution,
   onResolution,
+  format,
+  onFormat,
   hasSource,
   isVideo,
   exporting,
@@ -103,6 +108,8 @@ export default function ControlDeck({
   onPreset: (id: string) => void;
   resolution: ExportResolution;
   onResolution: (r: ExportResolution) => void;
+  format: ExportFormat;
+  onFormat: (f: ExportFormat) => void;
   hasSource: boolean;
   isVideo: boolean;
   exporting: 'frame' | 'clip' | null;
@@ -254,6 +261,28 @@ export default function ControlDeck({
           </div>
         </div>
 
+        <div>
+          <span className="mb-1.5 block text-xs text-ink-dim">Format</span>
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-dusk/40 p-1">
+            {FORMATS.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => onFormat(f)}
+                title={f === 'jpeg' ? 'JPEG · quality 0.92' : 'PNG · lossless'}
+                className={cn(
+                  'rounded-lg py-1.5 font-mono text-[11px] uppercase transition-colors duration-200',
+                  format === f
+                    ? 'bg-brand text-ink'
+                    : 'text-ink-faint hover:text-ink-dim',
+                )}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <GoldButton
           type="button"
           className="w-full text-xs"
@@ -261,7 +290,9 @@ export default function ControlDeck({
           onClick={onExportFrame}
         >
           <Camera className="h-4 w-4" />
-          {exporting === 'frame' ? 'Rendering…' : `Export Frame (PNG) · ${resolution}²`}
+          {exporting === 'frame'
+            ? 'Rendering…'
+            : `Export Frame (${format.toUpperCase()}) · ${resolution}²`}
         </GoldButton>
 
         <div className="relative overflow-hidden rounded-full">
