@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Stardome — Fulldome Studio</title>
+<style>
+  :root {
+    --bg: #05070d;
+    --panel: rgba(10, 14, 24, 0.82);
+    --panel-border: rgba(120, 160, 255, 0.18);
+    --text: #cfd8ea;
+    --text-dim: #7c8aa5;
+    --accent: #6ea8ff;
+    --accent2: #ffd27a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--text); }
+  #glcanvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+  #glcanvas.dragging { cursor: grabbing; }
+
+  .panel {
+    position: fixed; z-index: 10;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+
+  /* ---------- top bar ---------- */
+  #topbar {
+    top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px; max-width: calc(100vw - 28px);
+    flex-wrap: wrap; justify-content: center;
+  }
+  #topbar .title { font-weight: 700; letter-spacing: 0.14em; font-size: 14px; color: #fff; white-space: nowrap; }
+  #topbar .title span { color: var(--accent); }
+  #topbar .subtitle { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+  .seg { display: flex; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    background: transparent; border: none; color: var(--text-dim);
+    padding: 6px 10px; font-size: 11.5px; cursor: pointer; letter-spacing: 0.04em;
+    border-right: 1px solid var(--panel-border); transition: all .15s;
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button:hover { color: var(--text); background: rgba(110,168,255,0.08); }
+  .seg button.active { background: var(--accent); color: #06101f; font-weight: 600; }
+  .hbtn {
+    background: rgba(110,168,255,0.12); border: 1px solid var(--panel-border);
+    color: var(--text); border-radius: 8px; padding: 6px 12px; font-size: 11.5px;
+    cursor: pointer; transition: all .15s;
+  }
+  .hbtn:hover { background: rgba(110,168,255,0.25); }
+
+  /* ---------- playlist ---------- */
+  #playlist { top: 84px; left: 14px; width: 270px; max-height: calc(100vh - 260px); display: flex; flex-direction: column; overflow: hidden; }
+  #playlist .phead { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 8px; }
+  #playlist .phead h2 { font-size: 12px; letter-spacing: 0.16em; color: var(--accent2); font-weight: 700; }
+  #plist { list-style: none; overflow-y: auto; padding: 4px 8px 8px; flex: 1; }
+  #plist li {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 9px; border-radius: 8px; cursor: pointer;
+    font-size: 12.5px; color: var(--text-dim); transition: all .12s; margin-bottom: 2px;
+  }
+  #plist li:hover { background: rgba(110,168,255,0.08); color: var(--text); }
+  #plist li.active { background: rgba(110,168,255,0.18); color: #fff; }
+  #plist li .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+  #plist li.active .dot { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+  #plist li .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #plist li .rm { opacity: 0; border: none; background: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 0 2px; }
+  #plist li:hover .rm { opacity: 1; }
+  #plist li .rm:hover { color: #ff8080; }
+  #pfoot { padding: 10px 12px; border-top: 1px solid var(--panel-border); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #addbtn { flex: 1; }
+  #plist li .dur {
+    width: 44px; background: rgba(10,14,24,0.8); color: var(--accent2);
+    border: 1px solid var(--panel-border); border-radius: 5px;
+    font-size: 10px; padding: 2px 4px; text-align: center; flex-shrink: 0;
+  }
+  #recBtn.recording { background: #ff5252; color: #fff; animation: recpulse 1.2s ease-in-out infinite; }
+  @keyframes recpulse { 50% { opacity: 0.55; } }
+  .chk { font-size: 10px; }
+  #plist li .cue { color: var(--accent2); background: none; }
+  #bedBox { display: flex; align-items: center; gap: 7px; padding: 7px 12px 2px; font-size: 10px; color: var(--text-dim); }
+  #bedBox input[type=range] { flex: 1; accent-color: var(--accent2); min-width: 40px; }
+  #bedName { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #timeline { width: 100%; height: 46px; display: block; cursor: pointer; touch-action: none;
+              border: 1px solid var(--panel-border); border-radius: 8px;
+              background: rgba(255,255,255,0.02); }
+  .chk { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); cursor: pointer; user-select: none; }
+
+  /* ---------- transport / settings ---------- */
+  #controls {
+    bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 9px; padding: 12px 16px;
+    width: min(680px, calc(100vw - 28px));
+  }
+  #transport { display: flex; align-items: center; gap: 10px; }
+  .tbtn {
+    background: rgba(110,168,255,0.1); border: 1px solid var(--panel-border);
+    color: var(--text); width: 34px; height: 34px; border-radius: 50%;
+    cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .tbtn:hover { background: rgba(110,168,255,0.28); }
+  .tbtn.main { width: 42px; height: 42px; background: var(--accent); color: #06101f; font-size: 15px; }
+  .tbtn.main:hover { background: #8fbaff; }
+  #seek { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
+  #timecode { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #vol { width: 70px; accent-color: var(--accent); }
+  #sliders { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .sl { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--text-dim); letter-spacing: 0.06em; }
+  .sl input[type=range] { width: 90px; accent-color: var(--accent); }
+  .sl .val { color: var(--accent2); min-width: 34px; font-variant-numeric: tabular-nums; }
+
+  /* ---------- image editor ---------- */
+  #editor {
+    top: 84px; right: 14px; width: 300px;
+    max-height: calc(100vh - 170px);
+    display: flex; flex-direction: column; padding-bottom: 10px;
+  }
+  #edStageWrap {
+    margin: 0 10px; background:
+      repeating-conic-gradient(rgba(255,255,255,0.06) 0% 25%, transparent 0% 50%) 0 0/16px 16px,
+      #0a0d16;
+    border: 1px solid var(--panel-border); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 120px; overflow: hidden;
+  }
+  #edCanvas { max-width: 100%; max-height: 300px; display: block; cursor: move; touch-action: none; }
+  .edrow { display: flex; gap: 7px; padding: 8px 10px 0; flex-wrap: wrap; }
+  .edrow .hbtn { flex: 1; font-size: 10.5px; padding: 6px 8px; white-space: nowrap; }
+  #edPresets { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 10px 0; }
+  #edPresets img {
+    width: 38px; height: 38px; object-fit: cover; border-radius: 6px;
+    border: 1px solid var(--panel-border); cursor: pointer; transition: all .12s;
+  }
+  #edPresets img:hover { border-color: var(--accent); transform: scale(1.08); }
+  #edLayers { padding: 9px 10px 0; max-height: 130px; overflow-y: auto; }
+  #edLayers .lyr {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border-radius: 7px; font-size: 11.5px; color: var(--text-dim);
+    cursor: pointer; margin-bottom: 2px;
+  }
+  #edLayers .lyr:hover { background: rgba(110,168,255,0.08); color: var(--text); }
+  #edLayers .lyr.sel { background: rgba(110,168,255,0.2); color: #fff; }
+  #edLayers .lyr canvas { width: 26px; height: 20px; object-fit: cover; border-radius: 4px; background:#000; flex-shrink:0; }
+  #edLayers .lyr .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #edProps { padding: 9px 10px 0; display: flex; flex-direction: column; gap: 7px; }
+  #edProps .sl { justify-content: space-between; }
+  #edProps .sl input[type=range] { width: 120px; }
+  #edProps select {
+    background: rgba(10,14,24,0.9); color: var(--text);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: 3px 6px; font-size: 11px;
+  }
+
+  #hint {
+    position: fixed; bottom: 16px; right: 16px; z-index: 9;
+    font-size: 10.5px; color: var(--text-dim); text-align: right; line-height: 1.7;
+    letter-spacing: 0.04em; pointer-events: none; opacity: 0.85;
+  }
+  #loading {
+    position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: var(--bg); transition: opacity .5s; font-size: 13px; color: var(--text-dim);
+    letter-spacing: 0.2em;
+  }
+  #loading.gone { opacity: 0; pointer-events: none; }
+  .spinner { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--panel-border); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 1200px) {
+    #topbar .subtitle { display: none; }
+  }
+  @media (max-width: 760px) {
+    #playlist { width: 220px; max-height: 40vh; }
+    #topbar .subtitle { display: none; }
+    .sl input[type=range] { width: 64px; }
+    #hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+
+<div id="loading"><div class="spinner"></div><div>ENTERING THE DOME…</div></div>
+
+<div id="topbar" class="panel">
+  <div>
+    <div class="title">STARDOME<span> ⁂</span></div>
+    <div class="subtitle">fulldome studio · create &amp; preview shows in a virtual dome</div>
+  </div>
+  <div class="seg" id="envSeg">
+    <button data-env="0" class="active">Tilted Dome</button>
+    <button data-env="1">Flat Dome</button>
+    <button data-env="2">Cinema</button>
+    <button data-env="3">Equirect 360°</button>
+  </div>
+  <button class="hbtn" id="editBtn">🎨 Editor</button>
+  <button class="hbtn" id="vrBtn" style="display:none" title="Enter VR (headset required)">🥽 VR</button>
+  <button class="hbtn" id="fsBtn">⛶ Fullscreen</button>
+</div>
+
+<div id="editor" class="panel" style="display:none">
+  <div class="phead">
+    <h2 style="font-size:12px;letter-spacing:0.16em;color:var(--accent2);font-weight:700">IMAGE EDITOR</h2>
+    <span style="display:flex;gap:5px">
+      <button class="hbtn" id="edUndo" style="padding:3px 9px" title="undo (ctrl+z)">↶</button>
+      <button class="hbtn" id="edRedo" style="padding:3px 9px" title="redo (ctrl+shift+z)">↷</button>
+      <button class="hbtn" id="editClose" style="padding:3px 9px">✕</button>
+    </span>
+  </div>
+  <div id="edStageWrap"><canvas id="edCanvas"></canvas></div>
+  <div class="edrow">
+    <button class="hbtn" id="edBaseBtn" title="Use the currently playing queue image as the base">Set base from queue</button>
+    <button class="hbtn" id="edUploadBtn">＋ Overlay</button>
+    <button class="hbtn" id="edTextBtn" title="add a title text layer">T Text</button>
+    <input type="file" id="edFile" accept="image/*" multiple style="display:none">
+  </div>
+  <div id="edPresets"></div>
+  <div id="edLayers"></div>
+  <div id="edProps">
+    <label class="sl">Opacity <input type="range" id="edOpacity" min="5" max="100" value="100"><span class="val" id="edOpacityV">100%</span></label>
+    <label class="sl">Scale <input type="range" id="edScale" min="5" max="300" value="100"><span class="val" id="edScaleV">100%</span></label>
+    <label class="sl">Rotate <input type="range" id="edRot" min="-180" max="180" value="0"><span class="val" id="edRotV">0°</span></label>
+    <label class="sl">Blend
+      <select id="edBlend">
+        <option value="source-over">normal</option>
+        <option value="screen">screen</option>
+        <option value="multiply">multiply</option>
+        <option value="overlay">overlay</option>
+        <option value="lighter">add</option>
+      </select>
+    </label>
+    <div id="edTextProps" style="display:none;flex-direction:column;gap:7px">
+      <input type="text" id="edText" placeholder="title text…" style="background:rgba(10,14,24,0.8);color:var(--text);border:1px solid var(--panel-border);border-radius:6px;padding:5px 8px;font-size:12px">
+      <label class="sl">Size <input type="number" id="edTextSize" min="8" max="400" value="64" style="width:64px;background:rgba(10,14,24,0.8);color:var(--text);border:1px solid var(--panel-border);border-radius:6px;padding:3px 6px;font-size:11px"></label>
+      <label class="sl">Color <input type="color" id="edTextColor" value="#ffffff" style="width:40px;height:22px;border:none;background:none;cursor:pointer"></label>
+    </div>
+    <div class="edrow" style="margin-top:2px">
+      <button class="hbtn" id="edUp">↑ layer</button>
+      <button class="hbtn" id="edDown">↓ layer</button>
+      <button class="hbtn" id="edDel" style="color:#ff9090">✕ delete</button>
+    </div>
+  </div>
+  <div class="edrow">
+    <button class="hbtn" id="edExport">⬇ Export PNG</button>
+    <button class="hbtn" id="edSend">➜ Send to dome</button>
+  </div>
+</div>
+
+<div id="playlist" class="panel">
+  <div class="phead"><h2>SHOW QUEUE</h2><span style="font-size:10px;color:var(--text-dim)" id="pcount"></span></div>
+  <ul id="plist"></ul>
+  <div id="pfoot">
+    <button class="hbtn" id="addbtn">＋ Add media</button>
+    <label class="chk"><input type="checkbox" id="autoChk" checked> auto-advance</label>
+    <button class="hbtn" id="saveShow" title="Download the show queue as a JSON file">⬇ Show</button>
+    <button class="hbtn" id="loadShowBtn" title="Load a show queue JSON file">⬆ Show</button>
+  </div>
+  <input type="file" id="fileInput" accept="video/*,image/*,audio/*" multiple style="display:none">
+  <input type="file" id="showFileInput" accept="application/json,.json" style="display:none">
+  <div id="bedBox" style="display:none">
+    <span>♫</span><span id="bedName"></span>
+    <input type="range" id="bedVol" min="0" max="100" value="70" title="Audio bed volume">
+    <button class="hbtn" id="bedClear" style="padding:2px 7px">✕</button>
+  </div>
+</div>
+
+<div id="controls" class="panel">
+  <div id="transport">
+    <button class="tbtn" id="prevBtn" title="Previous">⏮</button>
+    <button class="tbtn main" id="playBtn" title="Play / pause">▶</button>
+    <button class="tbtn" id="nextBtn" title="Next">⏭</button>
+    <input type="range" id="seek" min="0" max="1000" value="0">
+    <span id="timecode">--:-- / --:--</span>
+    <input type="range" id="vol" min="0" max="100" value="80" title="Volume">
+    <button class="tbtn" id="recBtn" title="Record the dome output to a WebM video">⏺</button>
+  </div>
+  <canvas id="timeline" title="Show timeline — click a segment to jump, drag its right edge to resize"></canvas>
+  <div id="sliders">
+    <div class="seg" id="projSeg">
+      <button data-proj="0" class="active">Fisheye</button>
+      <button data-proj="1">Equirect</button>
+      <button data-proj="2">Flat</button>
+    </div>
+    <div class="seg" id="transSeg">
+      <button data-trans="fade" class="active">Crossfade</button>
+      <button data-trans="cut">Cut</button>
+    </div>
+    <label class="sl">Rot <input type="range" id="rotSl" min="0" max="360" value="0"><span class="val" id="rotVal">0°</span></label>
+    <label class="sl">Dome tilt <input type="range" id="tiltSl" min="0" max="45" value="25"><span class="val" id="tiltVal">25°</span></label>
+    <label class="sl">Fish FOV <input type="range" id="fishSl" min="90" max="360" value="180"><span class="val" id="fishVal">180°</span></label>
+    <label class="sl">Zoom <input type="range" id="zoomSl" min="40" max="120" value="75"><span class="val" id="zoomVal">75°</span></label>
+    <label class="sl">Seq <select id="fpsSel"><option>5</option><option selected>10</option><option>30</option></select>fps</label>
+    <label class="sl"><select id="resSel"><option>512</option><option selected>1024</option><option>2048</option></select>px</label>
+    <button class="hbtn" id="framesBtn" style="font-size:10.5px" title="Export the current segment as a fulldome PNG frame sequence (ZIP)">⬇ Frames</button>
+  </div>
+</div>
+
+<div id="hint">
+  drag — look around · wheel — zoom<br>
+  space — play/pause · ←/→ — skip · F — fullscreen
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   OpenDome — a Festoon-style virtual planetarium dome player.
+   Raw WebGL2, zero dependencies. The fragment shader casts a ray
+   per pixel from the seat at the dome's center, intersects the
+   virtual dome/cinema/sphere, then maps the hit direction onto
+   the queued content using the selected fulldome projection.
+   ============================================================ */
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec2 aPos;
+out vec2 vUv;
+void main(){ vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
+
+const FRAG_SRC = `#version 300 es
+precision highp float;
+
+in vec2 vUv;
+out vec4 fragColor;
+
+uniform vec2  uRes;
+uniform float uTime;
+uniform sampler2D uTexA;
+uniform sampler2D uTexB;
+uniform float uHasA;        // 1 if slot A holds content
+uniform float uHasB;
+uniform float uFade;        // 0 = all A, 1 = all B
+uniform int   uProj;        // 0 fisheye, 1 equirect, 2 flat
+uniform float uFishFov;     // fisheye diameter, radians
+uniform int   uEnv;         // 0 tilted dome, 1 flat dome, 2 cinema, 3 equirect sphere
+uniform float uDomeTilt;    // radians
+uniform float uRot;         // content rotation around dome zenith, radians
+uniform float uYaw;         // camera look (radians)
+uniform float uPitch;
+uniform float uFov;         // camera vertical fov (radians)
+uniform float uDemo;        // 0..1 procedural star-show strength (used when slot empty)
+uniform float uTexAspectA;  // width/height of content in slot A
+uniform float uTexAspectB;
+uniform mat4  uView;        // XR per-eye view matrix (used when uXR = 1)
+uniform float uXR;          // 1 = rendering an XR eye pass
+
+const float PI  = 3.141592653589793;
+const float R   = 10.0;             // dome radius (camera sits at center)
+const float RIM = radians(80.0);    // dome rim half-angle measured from zenith
+
+mat3 rotX(float a){ float c=cos(a),s=sin(a); return mat3(1.,0.,0., 0.,c,s, 0.,-s,c); }
+mat3 rotY(float a){ float c=cos(a),s=sin(a); return mat3(c,0.,-s, 0.,1.,0., s,0.,c); }
+
+float hash13(vec3 p){
+  p = fract(p * 0.1031);
+  p += dot(p, p.zyx + 31.32);
+  return fract((p.x + p.y) * p.z);
+}
+
+/* -------- content sampling, per projection -------- */
+
+vec4 sampleFlat(vec3 d, float texAspect, sampler2D tex){
+  if (d.z >= -0.001) return vec4(0.0);
+  float t = -1.0 / d.z;                 // virtual screen one unit ahead
+  vec2 p = (d * t).xy;
+  float h = tan(radians(35.0));         // 70° vertical window
+  float w = h * texAspect;
+  vec2 uv = p / (2.0 * vec2(w, h)) + 0.5;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
+  return texture(tex, uv);
+}
+
+vec4 sampleEquirect(vec3 d, sampler2D tex){
+  float u = atan(d.x, d.z) / (2.0 * PI) + 0.5;
+  float v = asin(clamp(d.y, -1.0, 1.0)) / PI + 0.5;
+  return texture(tex, vec2(u, v));
+}
+
+vec4 sampleFisheye(vec3 d, float fishFov, sampler2D tex){
+  float th = acos(clamp(d.y, -1.0, 1.0));   // angular distance from zenith
+  float r = th / (fishFov * 0.5);
+  if (r > 1.0) return vec4(0.0);
+  float az = atan(d.x, d.z);
+  vec2 uv = vec2(0.5) + 0.5 * r * vec2(cos(az), sin(az));
+  return texture(tex, uv);
+}
+
+vec4 projectContent(vec3 d, int proj, float fishFov, float texAspect,
+                    sampler2D tex, float hasTex){
+  if (hasTex < 0.5) return vec4(0.0);
+  if (proj == 0) return sampleFisheye(d, fishFov, tex);
+  if (proj == 1) return sampleEquirect(d, tex);
+  return sampleFlat(d, texAspect, tex);
+}
+
+/* -------- procedural demo star show -------- */
+
+vec3 starShow(vec3 dir){
+  vec3 d = rotY(uTime * 0.008) * dir;          // slow sky drift
+  vec3 col = vec3(0.004, 0.005, 0.012);
+  // faint galactic band
+  float band = exp(-pow(abs(dot(d, normalize(vec3(0.35, 0.9, 0.25)))), 2.0) * 7.0);
+  col += vec3(0.020, 0.024, 0.040) * band;
+  // two star layers of point-like stars
+  for (int i = 0; i < 2; i++){
+    float scale = i == 0 ? 22.0 : 52.0;
+    vec3 id = floor(d * scale);
+    vec3 f  = fract(d * scale) - 0.5;
+    float h  = hash13(id + float(i) * 17.7);
+    float h2 = hash13(id + float(i) * 91.3);
+    if (h > 0.30){
+      vec3 sp = (vec3(hash13(id + 1.3), hash13(id + 2.9), hash13(id + 4.1)) - 0.5) * 0.72;
+      float dist = length(f - sp);
+      float b = (h - 0.30) / 0.70;
+      float core = smoothstep(0.10 + b * 0.05, 0.0, dist);
+      float tw = 0.6 + 0.4 * sin(uTime * (0.5 + b * 2.8) + h2 * 43.0);
+      vec3 tint = mix(vec3(0.75, 0.83, 1.0), vec3(1.0, 0.88, 0.72), fract(h2 * 7.3));
+      col += tint * core * b * tw * (i == 0 ? 2.3 : 1.1);
+    }
+  }
+  return col;
+}
+
+/* -------- theatre surround for rays that miss the dome -------- */
+
+vec3 theatre(vec3 dir){
+  float down = clamp(-dir.y, 0.0, 1.0);
+  vec3 c = mix(vec3(0.010, 0.011, 0.020), vec3(0.028, 0.016, 0.018), pow(down, 1.4));
+  // faint rows of seats below the dome rim
+  float rows = smoothstep(0.55, 1.0, down) * (0.5 + 0.5 * sin(atan(dir.x, dir.z) * 24.0 + down * 30.0));
+  c += vec3(0.012, 0.006, 0.006) * rows;
+  return c;
+}
+
+vec3 backdrop(vec3 dir){
+  vec3 c = theatre(dir);
+  if (uDemo > 0.001) c = mix(c, starShow(dir), uDemo);
+  return c;
+}
+
+void main(){
+  vec2 uv = vUv * 2.0 - 1.0;
+  uv.x *= uRes.x / uRes.y;
+  float tv = tan(uFov * 0.5);
+  vec3 dir;
+  if (uXR > 0.5) {
+    dir = normalize((uView * vec4(uv.x * tv, uv.y * tv, -1.0, 0.0)).xyz);
+  } else {
+    dir = rotY(uYaw) * rotX(uPitch) * normalize(vec3(uv.x * tv, uv.y * tv, -1.0));
+  }
+
+  vec3 col;
+  bool front = dir.z < -0.0001;
+
+  if (uEnv == 2) {
+    /* ------------------------- CINEMA ------------------------- */
+    if (front) {
+      float t = -8.0 / dir.z;
+      vec2 p = (dir * t).xy;
+      float h = 8.0 * tan(radians(30.0));        // screen: 60° vfov from the seat
+      float w = h * 16.0 / 9.0;
+      vec2 suv = p / (2.0 * vec2(w, h)) + 0.5;
+      if (suv.x >= 0.0 && suv.x <= 1.0 && suv.y >= 0.0 && suv.y <= 1.0) {
+        vec4 a = mix(vec4(0.0), texture(uTexA, suv), uHasA);
+        vec4 b = mix(vec4(0.0), texture(uTexB, suv), uHasB);
+        vec4 c = mix(a, b, uFade);
+        float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+        col = c.rgb + vec3(0.012, 0.010, 0.014) * (1.0 - lum);  // faint screen glow
+        if (uDemo > 0.001 && uHasA < 0.5 && uHasB < 0.5) col = starShow(dir);
+      } else {
+        col = theatre(dir);   // auditorium wall around the screen
+      }
+    } else {
+      col = theatre(dir);
+    }
+  }
+  else if (uEnv == 3) {
+    /* ------------------- EQUIRECT 360 SPHERE ------------------- */
+    vec3 d = rotY(uRot) * dir;
+    vec4 a = projectContent(d, 1, uFishFov, 1.0, uTexA, uHasA);
+    vec4 b = projectContent(d, 1, uFishFov, 1.0, uTexB, uHasB);
+    vec4 c = mix(a, b, uFade);
+    col = c.rgb;
+    if (c.a < 0.5) col = backdrop(d);
+  }
+  else {
+    /* ---------------------- DOME (tilt/flat) ------------------- */
+    float tilt = (uEnv == 0) ? uDomeTilt : 0.0;
+    vec3 axis = normalize(vec3(0.0, cos(tilt), -sin(tilt)));
+    float cosHit = dot(dir, axis);
+    if (cosHit > cos(RIM)) {
+      // ray hits the dome shell: convert to dome frame, rotate content, project
+      vec3 d = rotX(-tilt) * dir;
+      d = rotY(uRot) * d;
+      vec4 a = projectContent(d, uProj, uFishFov, uTexAspectA, uTexA, uHasA);
+      vec4 b = projectContent(d, uProj, uFishFov, uTexAspectB, uTexB, uHasB);
+      vec4 c = mix(a, b, uFade);
+      col = c.rgb;
+      if (c.a < 0.5) col = backdrop(d);
+    } else {
+      col = theatre(dir);
+    }
+  }
+
+  // gentle vignette + gamma
+  float vig = 1.0 - 0.35 * pow(length(vUv - 0.5) * 1.25, 2.4);
+  col *= vig;
+  fragColor = vec4(pow(max(col, 0.0), vec3(0.96)), 1.0);
+}
+`;
+
+/* --------------------------- GL bootstrap --------------------------- */
+
+const canvas = document.getElementById("glcanvas");
+const gl = canvas.getContext("webgl2", { antialias: true, alpha: false });
+if (!gl) {
+  document.getElementById("loading").innerHTML =
+    "<div style='color:#ff8080'>WebGL2 is not available in this browser.</div>";
+  throw new Error("WebGL2 unavailable");
+}
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT_SRC));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG_SRC));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+  throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+const U = {};
+for (const name of ["uRes","uTime","uTexA","uTexB","uHasA","uHasB","uFade","uProj",
+                    "uFishFov","uEnv","uDomeTilt","uRot","uYaw","uPitch","uFov",
+                    "uDemo","uTexAspectA","uTexAspectB","uView","uXR"])
+  U[name] = gl.getUniformLocation(prog, name);
+
+gl.uniform1i(U.uTexA, 0);
+gl.uniform1i(U.uTexB, 1);
+gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+
+let exportBusy = false;   // frame() defers to the exporter's own render loop
+
+function makeTexture(){
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  return t;
+}
+
+/* ------------------------ state ------------------------ */
+
+const state = {
+  env: 0, proj: 0,
+  yaw: 0, pitch: 0, fov: 75 * Math.PI / 180,
+  rot: 0, tilt: 25 * Math.PI / 180, fish: 180 * Math.PI / 180,
+  autoRotate: false,
+  slot: 0,            // which slot is currently active (0=A, 1=B)
+  fade: 0,            // 0 -> all active slot, 1 -> all other slot
+  fading: false,
+  demo: 1,            // star-show strength when slots are empty
+  autoAdvance: true,
+  slideTimer: 0,      // seconds on current still/demo item
+  slideDuration: 14,
+  playlist: [],
+  index: -1,
+};
+
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = Math.floor(innerWidth  * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+addEventListener("resize", resize);
+resize();
+
+/* ------------------------ playlist ------------------------ */
+
+const plistEl = document.getElementById("plist");
+const pcountEl = document.getElementById("pcount");
+
+function makeItem(kind, name, src){
+  return { kind, name, src, el: null, tex: makeTexture(),
+           aspect: 16/9, ready: false };
+}
+
+function uploadToTexture(item){
+  gl.bindTexture(gl.TEXTURE_2D, item.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, item.el);
+  item.ready = true;
+}
+
+function loadImageItem(item){
+  const img = new Image();
+  img.onload = () => { item.el = img; item.aspect = img.naturalWidth / img.naturalHeight;
+                       uploadToTexture(item); onItemReady(item); };
+  img.onerror = () => { item.error = true; onItemReady(item); };
+  img.src = item.src;
+}
+
+function loadVideoItem(item){
+  const v = document.createElement("video");
+  v.src = item.src; v.loop = false; v.playsInline = true; v.preload = "auto";
+  v.addEventListener("canplay", () => {
+    if (!item.ready){
+      item.el = v;
+      item.aspect = v.videoWidth / Math.max(1, v.videoHeight);
+      item.ready = true;
+      onItemReady(item);
+    }
+  }, { once: false });
+  v.addEventListener("ended", () => { if (state.autoAdvance) next(); });
+  v.addEventListener("error", () => { item.error = true; onItemReady(item); });
+}
+
+function addItem(kind, name, src, playNow){
+  const item = makeItem(kind, name, src);
+  state.playlist.push(item);
+  if (kind === "demo"){ item.ready = true; }
+  else if (kind === "image") loadImageItem(item);
+  else loadVideoItem(item);
+  renderPlaylist();
+  if (playNow) select(state.playlist.length - 1);
+  return item;
+}
+
+function removeItem(i){
+  const it = state.playlist[i];
+  if (editor.liveItem === it) editor.liveItem = null;
+  stopCue(it);
+  if (it.el && it.kind === "video") it.el.pause();
+  gl.deleteTexture(it.tex);
+  if (it.src && it.src.startsWith("blob:")) URL.revokeObjectURL(it.src);
+  state.playlist.splice(i, 1);
+  if (state.index === i){
+    // the playing item was removed: swap instantly to its neighbour (no crossfade —
+    // the outgoing frame no longer exists, so a fade would just show black)
+    const active = activeSlot();
+    if (active.item && active.item.kind === "video") active.item.el.pause();
+    active.item = null;
+    state.index = -1;
+    state.fading = false;
+    state.fade = 0;
+    if (state.playlist.length){
+      const ni = Math.min(i, state.playlist.length - 1);
+      const item = state.playlist[ni];
+      state.index = ni;
+      if (item.ready){
+        active.item = item;
+        if (item.kind === "video"){ item.el.currentTime = 0; item.el.volume = volEl.value / 100; item.el.play().catch(() => {}); }
+        state.slideTimer = 0;
+      } else pendingSelect = ni;
+    }
+    updatePlayButton();
+  }
+  else if (state.index > i) state.index--;
+  renderPlaylist();
+}
+
+function renderPlaylist(){
+  plistEl.innerHTML = "";
+  state.playlist.forEach((it, i) => {
+    const li = document.createElement("li");
+    if (i === state.index) li.classList.add("active");
+    const icon = it.kind === "demo" ? "✦" : it.kind === "video" ? "▸" : it.kind === "canvas" ? "🎨" : "❏";
+    const durBox = (it.kind !== "video" && it.kind !== "canvas")
+      ? `<input class="dur" type="number" min="3" max="600" value="${it.dur || 14}" title="seconds on screen">`
+      : "";
+    const cueBtn = it.cue ? `<button class="rm cue" title="audio cue: ${it.cue.name} — click to remove">♪</button>` +
+                            `<input class="dur cueoff" type="number" min="0" max="600" step="0.5" value="${it.cueOffset || 0}" title="cue start offset (seconds into the audio)">` : "";
+    li.innerHTML = `<span class="dot"></span><span style="opacity:.6;width:14px;text-align:center">${icon}</span>` +
+                   `<span class="nm">${it.name}</span>` + durBox + cueBtn +
+                   `<button class="rm" title="Remove">✕</button>`;
+    li.onclick = (e) => { if (!e.target.classList.contains("rm") && !e.target.classList.contains("cue") && e.target.tagName !== "INPUT") select(i); };
+    li.querySelector(".rm").onclick = () => removeItem(i);
+    const cueEl = li.querySelector(".cue");
+    if (cueEl) cueEl.onclick = () => { stopCue(it); it.cue = null; renderPlaylist(); };
+    const cueOff = li.querySelector(".cueoff");
+    if (cueOff) cueOff.onchange = () => { it.cueOffset = Math.max(0, parseFloat(cueOff.value) || 0); cueOff.value = it.cueOffset; };
+    const durIn = li.querySelector(".dur");
+    if (durIn) durIn.onchange = () => { it.dur = Math.max(3, Math.min(600, parseFloat(durIn.value) || 14)); durIn.value = it.dur; };
+    plistEl.appendChild(li);
+  });
+  pcountEl.textContent = state.playlist.length + " item" + (state.playlist.length === 1 ? "" : "s");
+}
+
+/* ------------------- slot switching / crossfade ------------------- */
+
+const slotA = { item: null }, slotB = { item: null };
+
+function activeSlot(){ return state.slot === 0 ? slotA : slotB; }
+function idleSlot(){ return state.slot === 0 ? slotB : slotA; }
+
+let pendingSelect = -1;
+
+function select(i){
+  if (i < 0 || i >= state.playlist.length) return;
+  const item = state.playlist[i];
+  if (item === activeSlot().item || item === idleSlot().item) return;  // already current or incoming
+  const idle = idleSlot();
+  // stop old media in idle slot if any
+  stopCue(idle.item);
+  if (idle.item && idle.item.kind === "video") idle.item.el.pause();
+  idle.item = null;
+
+  const doSwap = () => {
+    if (!item.ready){ // failed to load: skip ahead
+      if (state.autoAdvance && i + 1 < state.playlist.length) select(i + 1);
+      return;
+    }
+    if (state.transition === "cut"){ activateInstant(item, i); return; }
+    idle.item = item;
+    state.index = i;
+    state.fade = 0;
+    state.fading = true;
+    state.slideTimer = 0;
+    renderPlaylist();
+    updatePlayButton();
+  };
+
+  if (item.ready) doSwap();
+  else { pendingSelect = i; }
+}
+
+function onItemReady(item){
+  const i = state.playlist.indexOf(item);
+  if (pendingSelect === i){ pendingSelect = -1; select(i); }
+  else if (state.index === -1 && i === 0) select(0);
+}
+
+function finishFadeIfNeeded(dt){
+  if (!state.fading) return;
+  state.fade = Math.min(1, state.fade + dt / 0.9);
+  if (state.fade >= 1){
+    // the incoming content lives in the idle slot; the OUTGOING content
+    // is in the still-active slot — clear that one, then hand over.
+    const old = activeSlot();
+    stopCue(old.item);
+    if (old.item && old.item.kind === "video") old.item.el.pause();
+    old.item = null;
+    state.slot = 1 - state.slot;
+    state.fade = 0;
+    state.fading = false;
+    const cur = activeSlot().item;
+    if (cur) startItemPlayback(cur);
+    updatePlayButton();
+  }
+}
+
+/* ------------------- transport ------------------- */
+
+const playBtn = document.getElementById("playBtn");
+const seekEl = document.getElementById("seek");
+const timeEl = document.getElementById("timecode");
+const volEl = document.getElementById("vol");
+
+function currentItem(){ const s = activeSlot(); return state.fading ? (state.fade < 0.5 ? s.item : idleSlot().item) : s.item; }
+
+function updatePlayButton(){
+  const it = currentItem();
+  const playing = it && it.kind === "video" && !it.el.paused;
+  playBtn.textContent = playing ? "❚❚" : "▶";
+}
+
+playBtn.onclick = () => {
+  const it = activeSlot().item;
+  if (!it) return;
+  if (it.kind === "video"){ it.el.paused ? it.el.play().catch(()=>{}) : it.el.pause(); }
+  else state.slideTimer = 0;
+  updatePlayButton();
+};
+document.getElementById("prevBtn").onclick = () => skip(-1);
+document.getElementById("nextBtn").onclick = () => skip(1);
+
+function skip(dir){
+  if (!state.playlist.length) return;
+  let i = state.index < 0 ? 0 : state.index;
+  select((i + dir + state.playlist.length) % state.playlist.length);
+}
+function next(){ skip(1); }
+
+let seeking = false;
+seekEl.addEventListener("pointerdown", () => seeking = true);
+seekEl.addEventListener("pointerup", () => seeking = false);
+seekEl.oninput = () => {
+  const it = activeSlot().item;
+  if (it && it.kind === "video" && it.el.duration) it.el.currentTime = seekEl.value / 1000 * it.el.duration;
+};
+volEl.oninput = () => {
+  const it = activeSlot().item;
+  if (it && it.kind === "video") it.el.volume = volEl.value / 100;
+};
+
+function fmt(t){
+  if (!isFinite(t)) return "--:--";
+  t = Math.floor(t);
+  return Math.floor(t/60) + ":" + String(t%60).padStart(2, "0");
+}
+
+function tickTransport(dt){
+  const it = activeSlot().item;
+  // still-image / demo auto advance (canvas composite is live: never auto-skip it)
+  const segDur = it && (it.dur || state.slideDuration);
+  if (it && it.kind !== "video" && it.kind !== "canvas" && state.autoAdvance && !state.fading){
+    state.slideTimer += dt;
+    if (state.slideTimer > segDur) next();
+  }
+  if (it && it.kind === "video" && it.el.duration){
+    if (!seeking) seekEl.value = it.el.currentTime / it.el.duration * 1000;
+    timeEl.textContent = fmt(it.el.currentTime) + " / " + fmt(it.el.duration);
+  } else if (it){
+    const left = Math.max(0, segDur - state.slideTimer);
+    timeEl.textContent = it.kind === "demo" ? "star show ∞"
+                      : it.kind === "canvas" ? "live composite · edit away"
+                      : "still · " + Math.ceil(left) + "s";
+  } else timeEl.textContent = "--:-- / --:--";
+  drawTimeline();
+}
+
+/* ------------------- look / zoom input ------------------- */
+
+let dragging = false, lastX = 0, lastY = 0;
+canvas.addEventListener("pointerdown", e => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.classList.add("dragging"); canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointermove", e => {
+  if (!dragging) return;
+  state.yaw   -= (e.clientX - lastX) * 0.004;
+  state.pitch -= (e.clientY - lastY) * 0.004;
+  state.pitch = Math.max(-1.45, Math.min(1.45, state.pitch));
+  lastX = e.clientX; lastY = e.clientY;
+});
+canvas.addEventListener("pointerup", () => { dragging = false; canvas.classList.remove("dragging"); });
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  state.fov = Math.max(40 * Math.PI/180, Math.min(120 * Math.PI/180, state.fov + e.deltaY * 0.0009));
+  document.getElementById("zoomSl").value = Math.round(state.fov * 180 / Math.PI);
+  document.getElementById("zoomVal").textContent = Math.round(state.fov * 180 / Math.PI) + "°";
+}, { passive: false });
+
+/* ------------------- UI wiring ------------------- */
+
+function segWire(id, attr, apply){
+  const seg = document.getElementById(id);
+  seg.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    seg.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    apply(b.dataset[attr]);   // numeric segments parse in their handler
+  });
+}
+segWire("envSeg", "env", v => { state.env = parseInt(v, 10); });
+segWire("projSeg", "proj", v => { state.proj = parseInt(v, 10); });
+segWire("transSeg", "trans", v => { state.transition = v; });
+
+function startItemPlayback(item){
+  if (item.kind === "video"){ item.el.currentTime = 0; item.el.volume = volEl.value / 100; item.el.play().catch(() => {}); }
+  startCue(item);
+  state.slideTimer = 0;
+}
+
+function activateInstant(item, i){
+  // hard cut: swap the active slot immediately, no crossfade
+  const act = activeSlot(), idle = idleSlot();
+  stopCue(idle.item);
+  if (idle.item && idle.item.kind === "video") idle.item.el.pause();
+  idle.item = null;
+  stopCue(act.item);
+  if (act.item && act.item.kind === "video") act.item.el.pause();
+  act.item = item;
+  state.index = i;
+  state.fade = 0;
+  state.fading = false;
+  startItemPlayback(item);
+  renderPlaylist();
+  updatePlayButton();
+}
+
+function slider(id, valId, fn, fmtFn){
+  const sl = document.getElementById(id), val = document.getElementById(valId);
+  sl.addEventListener("input", () => { const v = parseFloat(sl.value); fn(v); val.textContent = fmtFn(v); });
+}
+slider("rotSl", "rotVal", v => state.rot = v * Math.PI/180, v => v + "°");
+slider("tiltSl", "tiltVal", v => state.tilt = v * Math.PI/180, v => v + "°");
+slider("fishSl", "fishVal", v => state.fish = v * Math.PI/180, v => v + "°");
+slider("zoomSl", "zoomVal", v => state.fov = v * Math.PI/180, v => v + "°");
+
+document.getElementById("autoChk").onchange = e => state.autoAdvance = e.target.checked;
+document.getElementById("fsBtn").onclick = toggleFs;
+function toggleFs(){
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(()=>{});
+}
+
+document.getElementById("addbtn").onclick = () => document.getElementById("fileInput").click();
+document.getElementById("fileInput").addEventListener("change", e => {
+  for (const f of e.target.files){
+    const url = URL.createObjectURL(f);
+    if (f.type.startsWith("video/")) addItem("video", f.name, url);
+    else if (f.type.startsWith("image/")) addItem("image", f.name, url);
+    else if (f.type.startsWith("audio/")) attachAudio(f, url);
+  }
+  e.target.value = "";
+});
+
+/* ---------------- audio: segment cues + show bed ----------------
+ * Uploading audio while a queue item is active attaches it as that
+ * segment's cue (plays when the segment starts, stops on switch).
+ * Uploading with nothing playing sets the looping show bed. */
+
+let bed = null;
+
+function attachAudio(file, url){
+  const item = activeSlot().item || state.playlist[state.index];
+  if (item && item.kind !== "demo"){
+    if (item.cue) URL.revokeObjectURL(item.cue.el.src);
+    item.cue = { el: new Audio(url), name: file.name };
+    renderPlaylist();
+    if (item === activeSlot().item && !state.fading) startCue(item);   // mid-segment: start right away
+  } else {
+    setBed(file, url);
+  }
+}
+
+function setBed(file, url){
+  if (bed) bed.el.pause();
+  bed = { el: new Audio(url), name: file.name };
+  bed.el.loop = true;
+  bed.el.volume = parseFloat(document.getElementById("bedVol").value) / 100;
+  bed.el.play().catch(() => {});
+  document.getElementById("bedName").textContent = file.name;
+  document.getElementById("bedBox").style.display = "flex";
+}
+
+document.getElementById("bedVol").addEventListener("input", e => {
+  if (bed) bed.el.volume = parseFloat(e.target.value) / 100;
+});
+document.getElementById("bedClear").onclick = () => {
+  if (bed){ bed.el.pause(); URL.revokeObjectURL(bed.el.src); bed = null; }
+  document.getElementById("bedBox").style.display = "none";
+};
+
+function startCue(item){
+  if (!item || !item.cue) return;
+  const a = item.cue.el;
+  a.volume = volEl.value / 100;
+  a.currentTime = item.cueOffset || 0;   // precise cue point
+  a.play().catch(() => {});
+}
+function stopCue(item){
+  if (item && item.cue) item.cue.el.pause();
+}
+
+addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.code === "Space"){ e.preventDefault(); playBtn.onclick(); }
+  else if (e.code === "ArrowRight") next();
+  else if (e.code === "ArrowLeft") skip(-1);
+  else if (e.code === "KeyF") toggleFs();
+  else if (e.code === "KeyR"){ state.yaw = 0; state.pitch = 0; }
+  else if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ" && editor.open){
+    e.preventDefault();
+    if (e.shiftKey) edRedo(); else edUndo();
+  }
+});
+
+/* ------------------- built-in demo show ------------------- */
+
+addItem("demo", "Live Star Show (procedural)", null);
+addItem("image", "Earth",        "images/earth.jpg");
+addItem("image", "The Moon",     "images/moon.jpg");
+addItem("image", "Mars",         "images/mars.jpg");
+addItem("image", "Jupiter",      "images/jupiter.jpg");
+addItem("image", "Saturn",       "images/saturn.jpg");
+addItem("image", "Europa",       "images/europa.jpg");
+addItem("image", "Io",           "images/io.jpg");
+addItem("image", "Callisto",     "images/callisto.jpg");
+addItem("image", "Charon",       "images/charon.jpg");
+addItem("image", "Deep Field",   "images/background.jpg");
+addItem("image", "Nebula Vista", "images/bg.jpg");
+select(0);
+
+/* ------------------- image editor ------------------- */
+
+const editor = {
+  open: false, base: null, baseName: "", layers: [], sel: null, nextId: 1,
+  liveItem: null,
+  canvas: document.getElementById("edCanvas"),
+};
+editor.ctx = editor.canvas.getContext("2d");
+
+const editorEl = document.getElementById("editor");
+const edProps = document.getElementById("edProps");
+
+document.getElementById("editBtn").onclick = () => {
+  editor.open = !editor.open;
+  editorEl.style.display = editor.open ? "flex" : "none";
+};
+document.getElementById("editClose").onclick = () => {
+  editor.open = false;
+  editorEl.style.display = "none";
+};
+
+function edSetBase(src, name){
+  const img = typeof src === "string" ? new Image() : src;
+  const apply = () => {
+    editor.base = img;
+    editor.baseName = name || "base";
+    const MAXW = 1600;
+    const k = Math.min(1, MAXW / img.naturalWidth);
+    editor.canvas.width  = Math.round(img.naturalWidth * k);
+    editor.canvas.height = Math.round(img.naturalHeight * k);
+    editor.layers = [];
+    editor.sel = null;
+    edSnapshot();
+    edRender();
+  };
+  if (typeof src === "string"){ img.onload = apply; img.src = src; }
+  else apply();
+}
+
+document.getElementById("edBaseBtn").onclick = () => {
+  const it = activeSlot().item;
+  if (it && it.kind === "image") edSetBase(it.el, it.name);
+  else if (it && it.kind === "canvas") edSetBase(it.el, it.name);
+};
+
+document.getElementById("edUploadBtn").onclick = () => document.getElementById("edFile").click();
+document.getElementById("edFile").addEventListener("change", e => {
+  for (const f of e.target.files){
+    const img = new Image();
+    img.onload = () => edAddLayer(img, f.name);
+    img.src = URL.createObjectURL(f);
+  }
+  e.target.value = "";
+});
+
+/* preset overlay thumbnails (built-in assets) */
+const PRESETS = ["earth","moon","mars","jupiter","saturn","europa","io","callisto",
+                 "charon","mercury","neptune","pluto","background","bg"];
+const presetCache = {};
+const edPresetsEl = document.getElementById("edPresets");
+for (const p of PRESETS){
+  const im = document.createElement("img");
+  im.src = "images/" + p + ".jpg";
+  im.title = p;
+  im.onclick = () => {
+    if (!presetCache[p]){
+      const big = new Image();
+      big.onload = () => { presetCache[p] = big; edAddLayer(big, p); };
+      big.src = "images/" + p + ".jpg";
+    } else edAddLayer(presetCache[p], p);
+  };
+  edPresetsEl.appendChild(im);
+}
+
+function edAddLayer(img, name){
+  if (!editor.base){ edSetBase(img, name); return; }   // first image becomes the base
+  const s = (editor.canvas.width * 0.35) / img.naturalWidth;
+  editor.layers.push({
+    id: editor.nextId++, img, name: name || "layer",
+    x: editor.canvas.width / 2, y: editor.canvas.height / 2,
+    scale: s, baseScale: s, rot: 0, opacity: 1, blend: "source-over",
+  });
+  editor.sel = editor.layers[editor.layers.length - 1].id;
+  edSnapshot();
+  edRender();
+}
+
+function edAddTextLayer(){
+  if (!editor.base){
+    editor.canvas.width = 1600;
+    editor.canvas.height = 900;
+    editor.baseName = "blank canvas";
+    edSnapshot();
+  }
+  editor.layers.push({
+    id: editor.nextId++, type: "text", text: "Title", img: null,
+    name: "text",
+    x: editor.canvas.width / 2, y: editor.canvas.height / 2,
+    size: 64, color: "#ffffff",
+    scale: 1, baseScale: 1, rot: 0, opacity: 1, blend: "source-over",
+  });
+  editor.sel = editor.layers[editor.layers.length - 1].id;
+  edSnapshot();
+  edRender();
+}
+document.getElementById("edTextBtn").onclick = edAddTextLayer;
+
+/* ---------------- undo / redo history ---------------- */
+
+let edHist = [], edHistPos = -1;
+
+function edCaptureCurrent(){
+  return {
+    base: editor.base, baseName: editor.baseName,
+    layers: editor.layers.map(l => Object.assign({}, l)),
+    w: editor.canvas.width, h: editor.canvas.height, sel: editor.sel,
+  };
+}
+function edSnapshot(){
+  edHist = edHist.slice(0, edHistPos + 1);
+  edHist.push(edCaptureCurrent());
+  if (edHist.length > 60) edHist.shift();
+  edHistPos = edHist.length - 1;
+}
+function edApplyHist(i){
+  const s = edHist[i];
+  if (!s) return;
+  editor.base = s.base;
+  editor.baseName = s.baseName;
+  editor.layers = s.layers.map(l => Object.assign({}, l));
+  editor.canvas.width = s.w;
+  editor.canvas.height = s.h;
+  editor.sel = s.sel;
+  edRender();
+}
+function edUndo(){ if (edHistPos > 0){ edHist[edHistPos] = edCaptureCurrent(); edHistPos--; edApplyHist(edHistPos); } }
+function edRedo(){ if (edHistPos < edHist.length - 1){ edHist[edHistPos] = edCaptureCurrent(); edHistPos++; edApplyHist(edHistPos); } }
+document.getElementById("edUndo").onclick = edUndo;
+document.getElementById("edRedo").onclick = edRedo;
+
+function edSelected(){ return editor.layers.find(l => l.id === editor.sel) || null; }
+
+function edRender(){
+  const c = editor.canvas, ctx = editor.ctx;
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (editor.base) ctx.drawImage(editor.base, 0, 0, c.width, c.height);
+  for (const l of editor.layers){
+    if (l.hidden) continue;
+    ctx.save();
+    ctx.globalAlpha = l.opacity;
+    ctx.globalCompositeOperation = l.blend;
+    ctx.translate(l.x, l.y);
+    ctx.rotate(l.rot);
+    ctx.scale(l.scale, l.scale);
+    if (l.type === "text"){
+      ctx.font = "600 " + l.size + "px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,0.75)";
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = l.color;
+      ctx.fillText(l.text, 0, 0);
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.drawImage(l.img, -l.img.naturalWidth / 2, -l.img.naturalHeight / 2);
+    }
+    ctx.restore();
+  }
+  if (editor.liveItem){
+    editor.liveItem.dirty = true;
+    editor.liveItem.aspect = c.width / c.height;   // keep dome mapping correct after base changes
+  }
+  edRenderLayers();
+  edRenderProps();
+}
+
+function edRenderLayers(){
+  const box = document.getElementById("edLayers");
+  box.innerHTML = "";
+  if (editor.base){
+    const b = document.createElement("div");
+    b.className = "lyr";
+    b.innerHTML = `<span style="opacity:.6;width:26px;text-align:center">▤</span><span class="nm">${editor.baseName} (base)</span>`;
+    b.onclick = () => { editor.sel = null; edRenderLayers(); edRenderProps(); };
+    if (editor.sel === null) b.classList.add("sel");
+    box.appendChild(b);
+  }
+  for (let i = editor.layers.length - 1; i >= 0; i--){
+    const l = editor.layers[i];
+    const d = document.createElement("div");
+    d.className = "lyr" + (l.id === editor.sel ? " sel" : "");
+    if (l.type === "text"){
+      const th = document.createElement("span");
+      th.style.cssText = "width:26px;text-align:center;color:var(--accent2);font-weight:700";
+      th.textContent = "T";
+      d.appendChild(th);
+    } else {
+      const th = document.createElement("canvas");
+      th.width = 26; th.height = 20;
+      const tc = th.getContext("2d");
+      const k = Math.min(26 / l.img.naturalWidth, 20 / l.img.naturalHeight);
+      tc.drawImage(l.img, 0, 0, l.img.naturalWidth * k, l.img.naturalHeight * k);
+      d.appendChild(th);
+    }
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = l.type === "text" ? "“" + l.text + "”" : l.name;
+    nm.style.opacity = l.hidden ? 0.35 : 1;
+    const eye = document.createElement("button");
+    eye.className = "rm";
+    eye.title = l.hidden ? "show layer" : "hide layer";
+    eye.textContent = l.hidden ? "–" : "👁";
+    eye.onclick = (e) => { e.stopPropagation(); l.hidden = !l.hidden; edSnapshot(); edRender(); };
+    d.appendChild(nm); d.appendChild(eye);
+    d.onclick = () => { editor.sel = l.id; edRenderLayers(); edRenderProps(); };
+    box.appendChild(d);
+  }
+}
+
+function edRenderProps(){
+  const l = edSelected();
+  edProps.style.display = l ? "flex" : "none";
+  if (!l) return;
+  document.getElementById("edOpacity").value = Math.round(l.opacity * 100);
+  document.getElementById("edOpacityV").textContent = Math.round(l.opacity * 100) + "%";
+  document.getElementById("edScale").value = Math.round(l.scale / l.baseScale * 100);
+  document.getElementById("edScaleV").textContent = Math.round(l.scale / l.baseScale * 100) + "%";
+  document.getElementById("edRot").value = Math.round(l.rot * 180 / Math.PI);
+  document.getElementById("edRotV").textContent = Math.round(l.rot * 180 / Math.PI) + "°";
+  document.getElementById("edBlend").value = l.blend;
+  const tp = document.getElementById("edTextProps");
+  tp.style.display = l.type === "text" ? "flex" : "none";
+  if (l.type === "text"){
+    document.getElementById("edText").value = l.text;
+    document.getElementById("edTextSize").value = l.size;
+    document.getElementById("edTextColor").value = l.color;
+  }
+}
+
+function edBindSlider(id, fn){
+  document.getElementById(id).addEventListener("input", e => {
+    const l = edSelected(); if (!l) return;
+    fn(l, parseFloat(e.target.value));
+    edRender();
+  });
+}
+edBindSlider("edOpacity", (l, v) => l.opacity = v / 100);
+edBindSlider("edScale",   (l, v) => l.scale = l.baseScale * v / 100);
+edBindSlider("edRot",     (l, v) => l.rot = v * Math.PI / 180);
+for (const id of ["edOpacity", "edScale", "edRot"])
+  document.getElementById(id).addEventListener("change", edSnapshot);
+document.getElementById("edBlend").addEventListener("change", e => {
+  const l = edSelected(); if (l){ l.blend = e.target.value; edSnapshot(); edRender(); }
+});
+
+document.getElementById("edText").addEventListener("input", e => {
+  const l = edSelected();
+  if (l && l.type === "text"){ l.text = e.target.value; edRender(); }
+});
+document.getElementById("edTextSize").addEventListener("change", e => {
+  const l = edSelected();
+  if (l && l.type === "text"){ l.size = Math.max(8, Math.min(400, parseFloat(e.target.value) || 64)); edSnapshot(); edRender(); }
+});
+document.getElementById("edTextColor").addEventListener("input", e => {
+  const l = edSelected();
+  if (l && l.type === "text"){ l.color = e.target.value; edRender(); }
+});
+
+document.getElementById("edUp").onclick = () => {
+  const i = editor.layers.findIndex(l => l.id === editor.sel);
+  if (i > 0){ [editor.layers[i-1], editor.layers[i]] = [editor.layers[i], editor.layers[i-1]]; edSnapshot(); edRender(); }
+};
+document.getElementById("edDown").onclick = () => {
+  const i = editor.layers.findIndex(l => l.id === editor.sel);
+  if (i >= 0 && i < editor.layers.length - 1){ [editor.layers[i+1], editor.layers[i]] = [editor.layers[i], editor.layers[i+1]]; edSnapshot(); edRender(); }
+};
+document.getElementById("edDel").onclick = () => {
+  const i = editor.layers.findIndex(l => l.id === editor.sel);
+  if (i >= 0){ editor.layers.splice(i, 1); editor.sel = null; edSnapshot(); edRender(); }
+};
+
+/* drag layers on the stage */
+let edDrag = null;
+function edCanvasPos(e){
+  const r = editor.canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * editor.canvas.width / r.width,
+    y: (e.clientY - r.top) * editor.canvas.height / r.height,
+  };
+}
+editor.canvas.addEventListener("pointerdown", e => {
+  const p = edCanvasPos(e);
+  for (let i = editor.layers.length - 1; i >= 0; i--){
+    const l = editor.layers[i];
+    if (l.hidden) continue;
+    let r;
+    if (l.type === "text"){
+      editor.ctx.font = "600 " + l.size + "px system-ui, sans-serif";
+      r = Math.max(editor.ctx.measureText(l.text).width, l.size) * l.scale / 2 + 12;
+    } else {
+      r = Math.max(l.img.naturalWidth, l.img.naturalHeight) * l.scale / 2;
+    }
+    if (Math.hypot(p.x - l.x, p.y - l.y) <= r){
+      editor.sel = l.id;
+      edDrag = { id: l.id, dx: p.x - l.x, dy: p.y - l.y, moved: false };
+      editor.canvas.setPointerCapture(e.pointerId);
+      edRenderLayers(); edRenderProps();
+      break;
+    }
+  }
+});
+editor.canvas.addEventListener("pointermove", e => {
+  if (!edDrag) return;
+  const l = editor.layers.find(x => x.id === edDrag.id);
+  if (!l) return;
+  if (!edDrag.moved){ edDrag.moved = true; edSnapshot(); }   // snapshot pre-move state
+  const p = edCanvasPos(e);
+  l.x = p.x - edDrag.dx;
+  l.y = p.y - edDrag.dy;
+  edRender();
+});
+editor.canvas.addEventListener("pointerup", () => edDrag = null);
+
+/* export / send-to-dome */
+document.getElementById("edExport").onclick = () => {
+  if (!editor.base) return;
+  editor.canvas.toBlob(b => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = "opendome-edit.png";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }, "image/png");
+};
+document.getElementById("edSend").onclick = () => {
+  if (!editor.base) return;
+  if (!editor.liveItem || !state.playlist.includes(editor.liveItem)){
+    const item = makeItem("canvas", "🎨 Editor composite", null);
+    item.el = editor.canvas;
+    item.ready = true;
+    item.dirty = true;
+    state.playlist.push(item);
+    editor.liveItem = item;
+    renderPlaylist();
+  }
+  editor.liveItem.aspect = editor.canvas.width / editor.canvas.height;
+  editor.liveItem.dirty = true;
+  select(state.playlist.indexOf(editor.liveItem));
+};
+
+/* ------------------- record dome output ------------------- */
+
+let recorder = null, recChunks = [];
+const recBtn = document.getElementById("recBtn");
+
+function pickMime(){
+  for (const m of ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"])
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  return "";
+}
+if (!window.MediaRecorder || !canvas.captureStream) recBtn.style.display = "none";
+
+recBtn.onclick = () => {
+  if (recorder){ recorder.stop(); return; }
+  const stream = canvas.captureStream(30);
+  recChunks = [];
+  const mime = pickMime();
+  try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+  catch (e) { recorder = null; return; }
+  recorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+  recorder.onstop = () => {
+    recorder = null;
+    recBtn.classList.remove("recording");
+    const blob = new Blob(recChunks, { type: "video/webm" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "stardome-show.webm";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  recorder.start(250);
+  recBtn.classList.add("recording");
+};
+
+/* ------------------- show files (save / load queue) ------------------- */
+
+document.getElementById("saveShow").onclick = () => {
+  const entries = [];
+  let skipped = 0;
+  for (const it of state.playlist){
+    if (it.kind === "canvas"){ skipped++; continue; }                         // live composite can't persist
+    if (it.src && (it.src.startsWith("blob:") || it.src.startsWith("file:"))){ skipped++; continue; } // local uploads can't persist
+    entries.push({ name: it.name, kind: it.kind, src: it.src, dur: it.dur || 14 });
+  }
+  const blob = new Blob([JSON.stringify({ app: "stardome", version: 1, items: entries }, null, 2)],
+                        { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "stardome-show.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+
+document.getElementById("loadShowBtn").onclick = () => document.getElementById("showFileInput").click();
+document.getElementById("showFileInput").addEventListener("change", e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const items = (JSON.parse(r.result).items) || [];
+      for (const en of items){
+        if (en.kind === "demo"){
+          if (!state.playlist.some(x => x.kind === "demo"))
+            addItem("demo", en.name || "Live Star Show", null).dur = en.dur || 14;
+          continue;
+        }
+        if (!en.src || state.playlist.some(x => x.src === en.src)) continue;
+        const it = addItem(en.kind === "video" ? "video" : "image",
+                           en.name || en.src.split("/").pop(), en.src);
+        it.dur = en.dur || 14;
+      }
+      renderPlaylist();
+    } catch (err) { /* invalid show file */ }
+  };
+  r.readAsText(f);
+});
+
+/* ------------------- show timeline ------------------- */
+
+const tlCanvas = document.getElementById("timeline");
+const tctx = tlCanvas.getContext("2d");
+let tlDrag = null;
+
+function segDuration(it){
+  if (it.kind === "video" && it.el && it.el.duration) return it.el.duration;
+  if (it.kind === "canvas") return 0;                       // live composite: not on the ruler
+  return it.dur || state.slideDuration;
+}
+
+function timelineLayout(){
+  const items = state.playlist.filter(it => it.kind !== "canvas");
+  const durs = items.map(segDuration);
+  const total = durs.reduce((a, b) => a + b, 0) || 1;
+  return { items, durs, total };
+}
+
+function drawTimeline(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = tlCanvas.clientWidth, h = 46;
+  if (!w) return;
+  if (tlCanvas.width !== Math.round(w * dpr)){ tlCanvas.width = Math.round(w * dpr); tlCanvas.height = Math.round(h * dpr); }
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tctx.clearRect(0, 0, w, h);
+
+  const { items, durs, total } = timelineLayout();
+  const x0 = 6, x1 = w - 6, span = x1 - x0;
+  const act = activeSlot().item;
+  let x = x0;
+
+  for (let i = 0; i < items.length; i++){
+    const it = items[i];
+    const sw = Math.max(4, span * durs[i] / total);
+    const isActive = it === act;
+    tctx.fillStyle = isActive ? "rgba(110,168,255,0.55)" : "rgba(110,168,255,0.18)";
+    tctx.strokeStyle = "rgba(120,160,255,0.35)";
+    tctx.beginPath();
+    tctx.roundRect(x, 8, sw - 2, 30, 5);
+    tctx.fill(); tctx.stroke();
+    // label
+    tctx.fillStyle = isActive ? "#06101f" : "#cfd8ea";
+    tctx.font = "9.5px system-ui";
+    tctx.textBaseline = "middle";
+    const label = it.name.length > 14 ? it.name.slice(0, 13) + "…" : it.name;
+    tctx.fillText(label, x + 5, 23, sw - 10);
+    // audio cue marker + offset tick
+    if (it.cue){
+      tctx.fillStyle = "#ffd27a";
+      tctx.font = "10px system-ui";
+      tctx.fillText("♪", x + 4, 12);
+      if (it.cueOffset > 0 && durs[i] > 0){
+        const ox = x + Math.min(sw - 4, (it.cueOffset / durs[i]) * sw);
+        tctx.fillRect(ox, 9, 1.5, 28);
+      }
+    }
+    it._tlx = x; it._tlw = sw;
+    x += sw;
+  }
+
+  // playhead
+  if (act && act._tlx !== undefined){
+    let prog = 0;
+    if (act.kind === "video" && act.el && act.el.duration) prog = act.el.currentTime / act.el.duration;
+    else if (act.kind !== "canvas") prog = Math.min(1, state.slideTimer / (segDuration(act) || 1));
+    const px = act._tlx + prog * (act._tlw - 2);
+    tctx.fillStyle = "#ffd27a";
+    tctx.fillRect(px - 1, 4, 2, 38);
+  }
+}
+
+function tlPos(e){
+  const r = tlCanvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, w: r.width };
+}
+
+tlCanvas.addEventListener("pointerdown", e => {
+  const p = tlPos(e);
+  const { items } = timelineLayout();
+  const it = items.find(i => p.x >= i._tlx && p.x <= i._tlx + i._tlw);
+  if (!it) return;
+  const i = state.playlist.indexOf(it);
+  const nearEdge = p.x > it._tlx + it._tlw - 8;
+  if (nearEdge && it.kind !== "video" && it.kind !== "canvas"){
+    tlDrag = { i, startX: p.x, orig: segDuration(it), w: p.w, moved: false };
+  } else if (i !== state.index){
+    select(i);
+  }
+  tlCanvas.setPointerCapture(e.pointerId);
+});
+tlCanvas.addEventListener("pointermove", e => {
+  if (!tlDrag) return;
+  const p = tlPos(e);
+  const { total } = timelineLayout();
+  const it = state.playlist[tlDrag.i];
+  if (!it) return;
+  const d = tlDrag.orig + ((p.x - tlDrag.startX) / tlDrag.w) * total;
+  it.dur = Math.max(3, Math.min(600, Math.round(d)));
+  tlDrag.moved = true;
+});
+tlCanvas.addEventListener("pointerup", () => {
+  if (tlDrag && tlDrag.moved) renderPlaylist();
+  tlDrag = null;
+});
+
+/* ------------------- fulldome master frame export ----------------
+   Renders the current segment offscreen at production resolution and
+   downloads a ZIP of PNG frames (store method — PNGs are pre-compressed). */
+
+const framesBtn = document.getElementById("framesBtn");
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++){
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(u8){
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function makeZip(entries){
+  const enc = new TextEncoder();
+  const chunks = [], central = [];
+  let offset = 0;
+  const d = new Date();
+  const time = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xFFFF;
+  const date = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF;
+  for (const e of entries){
+    const name = enc.encode(e.name);
+    const crc = crc32(e.data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true);
+    h.setUint16(8, 0, true); h.setUint16(10, time, true); h.setUint16(12, date, true);
+    h.setUint32(14, crc, true); h.setUint32(18, e.data.length, true); h.setUint32(22, e.data.length, true);
+    h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+    chunks.push(new Uint8Array(h.buffer), name, e.data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true);
+    c.setUint16(8, 0x0800, true); c.setUint16(12, time, true); c.setUint16(14, date, true);
+    c.setUint32(16, crc, true); c.setUint32(20, e.data.length, true); c.setUint32(24, e.data.length, true);
+    c.setUint16(28, name.length, true); c.setUint32(42, offset, true);
+    central.push(new Uint8Array(c.buffer), name);
+    offset += 30 + name.length + e.data.length;
+  }
+  const cdSize = central.reduce((a, c) => a + c.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...chunks, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
+}
+
+framesBtn.onclick = async () => {
+  if (exportBusy) return;
+  const item = activeSlot().item;
+  if (!item) return;
+  if (item.kind === "video"){
+    framesBtn.textContent = "use ⏺ for video";
+    setTimeout(() => framesBtn.textContent = "⬇ Frames", 1600);
+    return;
+  }
+  const fps = parseInt(document.getElementById("fpsSel").value, 10);
+  const res = parseInt(document.getElementById("resSel").value, 10);
+  const n = Math.max(1, Math.round(segDuration(item) * fps));
+  exportBusy = true;
+  framesBtn.disabled = true;
+  try {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, res, res, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.viewport(0, 0, res, res);
+
+    const px = new Uint8Array(res * res * 4);
+    const c2 = document.createElement("canvas");
+    c2.width = res; c2.height = res;
+    const cx2 = c2.getContext("2d");
+    const img = cx2.createImageData(res, res);
+    const entries = [];
+    const pad = String(n).length;
+    const t0 = performance.now() / 1000;
+    if (item.kind === "demo") state.demo = 1;
+    for (let i = 0; i < n; i++){
+      gl.uniform1i(U.uXR, 0);
+      gl.uniform1f(U.uYaw, state.yaw);
+      gl.uniform1f(U.uPitch, state.pitch);
+      renderScene(t0 + i / fps, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.readPixels(0, 0, res, res, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      const row = res * 4;
+      for (let y = 0; y < res; y++)
+        img.data.set(px.subarray((res - 1 - y) * row, (res - y) * row), y * row);
+      cx2.putImageData(img, 0, 0);
+      const blob = await new Promise(r => c2.toBlob(r, "image/png"));
+      entries.push({ name: "frame_" + String(i).padStart(pad, "0") + ".png",
+                     data: new Uint8Array(await blob.arrayBuffer()) });
+      framesBtn.textContent = "⏳ " + (i + 1) + "/" + n;
+      await new Promise(r => setTimeout(r, 0));   // keep the UI responsive on slow renderers
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.deleteFramebuffer(fbo);
+    gl.deleteTexture(tex);
+
+    framesBtn.textContent = "📦 zipping…";
+    const zip = makeZip(entries);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(zip);
+    a.download = (item.name || "show").replace(/[^\w]+/g, "_") + "_fisheye_" + res + "px.zip";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } finally {
+    exportBusy = false;
+    framesBtn.disabled = false;
+    framesBtn.textContent = "⬇ Frames";
+  }
+};
+
+/* ------------------- render loop ------------------- */
+
+function bindSlot(unit, tex){ gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); }
+
+function renderScene(timeSec, dt){
+  // drop slot references to items that left the playlist (deleted textures)
+  for (const slot of [slotA, slotB])
+    if (slot.item && !state.playlist.includes(slot.item)) slot.item = null;
+
+  // stream video frames / live editor composites into their own textures
+  for (const slot of [slotA, slotB]){
+    const it = slot.item;
+    if (!it || !it.ready) continue;
+    if (it.kind === "video" && !it.el.paused && it.el.readyState >= 2)
+      uploadToTexture(it);
+    else if (it.kind === "canvas" && it.dirty){
+      uploadToTexture(it);
+      it.dirty = false;
+    }
+  }
+
+  const a = slotA.item, b = slotB.item;
+  const aTex = a && a.ready && a.kind !== "demo";
+  const bTex = b && b.ready && b.kind !== "demo";
+  const starActive = (a && a.kind === "demo") || (b && b.kind === "demo") || (!a && !b);
+  state.demo = starActive ? Math.min(1, state.demo + dt * 1.5) : Math.max(0, state.demo - dt * 1.5);
+
+  gl.uniform1f(U.uTime, timeSec);
+  gl.uniform1f(U.uHasA, aTex ? 1 : 0);
+  gl.uniform1f(U.uHasB, bTex ? 1 : 0);
+  gl.uniform1f(U.uFade, state.fading ? easeInOut(state.fade) : 0);
+  gl.uniform1i(U.uProj, state.proj);
+  gl.uniform1f(U.uFishFov, state.fish);
+  gl.uniform1i(U.uEnv, state.env);
+  gl.uniform1f(U.uDomeTilt, state.tilt);
+  gl.uniform1f(U.uRot, state.rot);
+  gl.uniform1f(U.uFov, state.fov);
+  gl.uniform1f(U.uDemo, state.demo);
+  gl.uniform1f(U.uTexAspectA, a ? a.aspect : 1);
+  gl.uniform1f(U.uTexAspectB, b ? b.aspect : 1);
+
+  bindSlot(0, a ? a.tex : null);
+  bindSlot(1, b ? b.tex : null);
+}
+
+let lastT = performance.now();
+function frame(now, xrFrame){
+  const dt = Math.min(0.1, (now - lastT) / 1000);
+  lastT = now;
+
+  if (exportBusy) return;   // exporter owns the GL state right now
+
+  if (state.autoRotate && !xrFrame) state.yaw += dt * 0.05;
+
+  finishFadeIfNeeded(dt);
+  tickTransport(dt);
+  updatePlayButton();
+
+  renderScene(now / 1000, dt);
+
+  if (xrFrame){
+    // VR: draw once per eye into the XR layer using the eye's view matrix
+    const pose = xrFrame.getViewerPose(xrRefSpace);
+    if (!pose) return;
+    const layer = xrSession.renderState.baseLayer;
+    gl.uniform1i(U.uXR, 1);
+    for (const view of pose.views){
+      const vp = layer.getViewport(view);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+      gl.viewport(vp.x, vp.y, vp.width, vp.height);
+      gl.uniformMatrix4fv(U.uView, false, view.transform.inverse.matrix);
+      gl.uniform2f(U.uRes, vp.width, vp.height);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    gl.uniform1i(U.uXR, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  } else {
+    gl.uniform1i(U.uXR, 0);
+    gl.uniform1f(U.uYaw, state.yaw);
+    gl.uniform1f(U.uPitch, state.pitch);
+    gl.uniform2f(U.uRes, canvas.width, canvas.height);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+}
+function easeInOut(t){ return t * t * (3 - 2 * t); }
+
+// Paint one frame synchronously so the canvas is never blank — even if
+// requestAnimationFrame is throttled (hidden/occluded preview iframe).
+frame(performance.now());
+document.getElementById("loading").classList.add("gone");
+
+function loop(now){
+  frame(now);
+  if (!xrSession) requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Watchdog: if rAF stops firing (background tab, occluded iframe), keep
+// the dome alive by forcing a frame whenever the loop has stalled.
+setInterval(() => {
+  const now = performance.now();
+  if (!xrSession && now - lastT > 400) frame(now);
+}, 300);
+
+/* ---------------- WebXR: sit inside the dome ---------------- */
+
+let xrSession = null, xrRefSpace = null;
+const vrBtn = document.getElementById("vrBtn");
+
+(async () => {
+  try {
+    if (navigator.xr && await navigator.xr.isSessionSupported("immersive-vr"))
+      vrBtn.style.display = "";
+  } catch (e) { /* no XR — button stays hidden */ }
+})();
+
+vrBtn.onclick = async () => {
+  if (xrSession){ xrSession.end(); return; }
+  try {
+    xrSession = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor"] });
+    if (gl.makeXRCompatible) await gl.makeXRCompatible();
+    xrSession.updateRenderState({ baseLayer: new XRWebGLLayer(xrSession, gl) });
+    try { xrRefSpace = await xrSession.requestReferenceSpace("local-floor"); }
+    catch (e) { xrRefSpace = await xrSession.requestReferenceSpace("local"); }
+    xrSession.addEventListener("end", onXREnd);
+    vrBtn.textContent = "🥽 Exit VR";
+    xrSession.requestAnimationFrame(xrLoop);
+  } catch (e) {
+    console.warn("XR session failed:", e);
+    xrSession = null;
+  }
+};
+
+function xrLoop(time, xrFrame){
+  if (!xrSession) return;
+  frame(time, xrFrame);
+  xrSession.requestAnimationFrame(xrLoop);
+}
+
+function onXREnd(){
+  xrSession = null;
+  xrRefSpace = null;
+  vrBtn.textContent = "🥽 VR";
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  requestAnimationFrame(loop);   // resume the flat-screen loop
+}
+</script>
+<script>
+/* Desktop integration: pull media from the user's Stardome content folder
+   (Documents/Stardome/Shows) into the show queue, and expose a
+   "Content Folder" button to open/manage it. No-op in plain browsers. */
+(async () => {
+  if (!window.stardome) return;
+  const EXT_IMG = [".jpg",".jpeg",".png",".gif",".webp",".bmp"];
+  const EXT_VID = [".mp4",".webm",".mov",".mkv",".avi",".m4v"];
+  async function refresh(){
+    let files = [];
+    try { files = await window.stardome.scanContent(); } catch(e){ return; }
+    for (const f of files){
+      const ext = "." + (f.name.split(".").pop() || "").toLowerCase();
+      const url = "file:///" + f.path.replace(/\\/g, "/");
+      if (state.playlist.some(x => x.src === url)) continue;
+      if (EXT_VID.includes(ext)) addItem("video", f.name, url);
+      else if (EXT_IMG.includes(ext)) addItem("image", f.name, url);
+    }
+  }
+  const btn = document.createElement("button");
+  btn.className = "hbtn";
+  btn.textContent = "📁 Content";
+  btn.title = "Rescan your Stardome/Shows folder";
+  btn.onclick = () => { refresh(); if (window.stardome.openContentFolder) window.stardome.openContentFolder(); };
+  document.getElementById("topbar").appendChild(btn);
+  window.__refreshContent = refresh;
+  await refresh();
+})();
+</script>
+</body>
+</html>
