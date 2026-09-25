@@ -121,16 +121,41 @@
     top: 84px; right: 14px; width: 300px;
     max-height: calc(100vh - 170px);
     display: flex; flex-direction: column; padding-bottom: 10px;
+    overflow-y: auto;
   }
+  #editor > * { flex-shrink: 0; }
   #edStageWrap {
     margin: 0 10px; background:
       repeating-conic-gradient(rgba(255,255,255,0.06) 0% 25%, transparent 0% 50%) 0 0/16px 16px,
       #0a0d16;
     border: 1px solid var(--panel-border); border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    min-height: 120px; overflow: hidden;
+    position: relative; height: 220px; overflow: hidden; cursor: grab; touch-action: none;
   }
-  #edCanvas { max-width: 100%; max-height: 300px; display: block; cursor: move; touch-action: none; }
+  #edStageWrap.panning { cursor: grabbing; }
+  #edStageInner { position: absolute; left: 50%; top: 50%; line-height: 0; transform-origin: 0 0; }
+  #edCanvas { display: block; cursor: move; touch-action: none; border-radius: 2px; }
+  #edCanvas.brushing { cursor: crosshair; }
+  #edRecenter {
+    position: absolute; right: 6px; bottom: 6px; z-index: 2;
+    padding: 2px 8px; font-size: 11px; line-height: 1.4;
+  }
+  #edZoomPct {
+    position: absolute; left: 8px; bottom: 7px; z-index: 2; font-size: 9.5px;
+    color: var(--text-dim); pointer-events: none; font-variant-numeric: tabular-nums;
+  }
+  .hbtn.on { background: rgba(110,168,255,0.32); color: #fff; border-color: var(--accent); }
+  #edLive.on { background: rgba(255,210,122,0.25); color: var(--accent2); border-color: var(--accent2); }
+  #edBrushProps { display: none; }
+  #edBrushProps input[type=color] { width: 34px; height: 22px; border: none; background: none; cursor: pointer; padding: 0; }
+  #edAdj { display: none; flex-direction: column; gap: 7px; border-top: 1px solid var(--panel-border); padding-top: 7px; }
+  .ednum {
+    width: 56px; background: rgba(10,14,24,0.8); color: var(--text);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: 3px 6px; font-size: 11px;
+  }
+  .edrow select {
+    background: rgba(10,14,24,0.9); color: var(--text);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: 4px 6px; font-size: 11px;
+  }
   .edrow { display: flex; gap: 7px; padding: 8px 10px 0; flex-wrap: wrap; }
   .edrow .hbtn { flex: 1; font-size: 10.5px; padding: 6px 8px; white-space: nowrap; }
   #edPresets { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 10px 0; }
@@ -208,17 +233,37 @@
   <div class="phead">
     <h2 style="font-size:12px;letter-spacing:0.16em;color:var(--accent2);font-weight:700">IMAGE EDITOR</h2>
     <span style="display:flex;gap:5px">
+      <button class="hbtn" id="edLive" style="padding:3px 9px" title="stream edits to the dome in real time">◉ Live</button>
       <button class="hbtn" id="edUndo" style="padding:3px 9px" title="undo (ctrl+z)">↶</button>
       <button class="hbtn" id="edRedo" style="padding:3px 9px" title="redo (ctrl+shift+z)">↷</button>
       <button class="hbtn" id="editClose" style="padding:3px 9px">✕</button>
     </span>
   </div>
-  <div id="edStageWrap"><canvas id="edCanvas"></canvas></div>
+  <div id="edStageWrap">
+    <div id="edStageInner"><canvas id="edCanvas"></canvas></div>
+    <span id="edZoomPct">100%</span>
+    <button class="hbtn" id="edRecenter" title="fit & center the canvas (0)">⊕</button>
+  </div>
+  <div class="edrow" id="edTools">
+    <button class="hbtn on" data-tool="move" title="move layers">↖ Move</button>
+    <button class="hbtn" data-tool="brush" title="paint on the selected layer (or a new paint layer)">🖌 Brush</button>
+    <button class="hbtn" data-tool="eraser" title="erase from the selected image/paint layer">◪ Eraser</button>
+  </div>
+  <div class="edrow" id="edBrushProps">
+    <label class="sl">Size <input type="range" id="edBrushSize" min="1" max="200" value="30"><span class="val" id="edBrushSizeV">30</span></label>
+    <label class="sl">Flow <input type="range" id="edBrushOp" min="5" max="100" value="90"><span class="val" id="edBrushOpV">90%</span></label>
+    <label class="sl">Color <input type="color" id="edBrushColor" value="#ffd27a"></label>
+  </div>
   <div class="edrow">
     <button class="hbtn" id="edBaseBtn" title="Use the currently playing queue image as the base">Set base from queue</button>
     <button class="hbtn" id="edUploadBtn">＋ Overlay</button>
     <button class="hbtn" id="edTextBtn" title="add a title text layer">T Text</button>
     <input type="file" id="edFile" accept="image/*" multiple style="display:none">
+  </div>
+  <div class="edrow">
+    <label class="sl">W <input type="number" class="ednum" id="edSizeW" min="16" max="4096"></label>
+    <label class="sl">H <input type="number" class="ednum" id="edSizeH" min="16" max="4096"></label>
+    <button class="hbtn" id="edResize" title="resize / crop the canvas">Apply size</button>
   </div>
   <div id="edPresets"></div>
   <div id="edLayers"></div>
@@ -233,21 +278,50 @@
         <option value="multiply">multiply</option>
         <option value="overlay">overlay</option>
         <option value="lighter">add</option>
+        <option value="lighten">lighten</option>
+        <option value="darken">darken</option>
+        <option value="difference">difference</option>
+        <option value="exclusion">exclusion</option>
+        <option value="hard-light">hard-light</option>
+        <option value="soft-light">soft-light</option>
+        <option value="color-dodge">color-dodge</option>
+        <option value="color-burn">color-burn</option>
       </select>
     </label>
+    <div id="edAdj">
+      <label class="sl">Brightness <input type="range" id="edBri" min="-100" max="100" value="0"><span class="val" id="edBriV">0</span></label>
+      <label class="sl">Contrast <input type="range" id="edCon" min="-100" max="100" value="0"><span class="val" id="edConV">0</span></label>
+      <label class="sl">Saturation <input type="range" id="edSat" min="-100" max="100" value="0"><span class="val" id="edSatV">0</span></label>
+      <label class="sl">Hue <input type="range" id="edHue" min="-100" max="100" value="0"><span class="val" id="edHueV">0°</span></label>
+    </div>
     <div id="edTextProps" style="display:none;flex-direction:column;gap:7px">
       <input type="text" id="edText" placeholder="title text…" style="background:rgba(10,14,24,0.8);color:var(--text);border:1px solid var(--panel-border);border-radius:6px;padding:5px 8px;font-size:12px">
       <label class="sl">Size <input type="number" id="edTextSize" min="8" max="400" value="64" style="width:64px;background:rgba(10,14,24,0.8);color:var(--text);border:1px solid var(--panel-border);border-radius:6px;padding:3px 6px;font-size:11px"></label>
       <label class="sl">Color <input type="color" id="edTextColor" value="#ffffff" style="width:40px;height:22px;border:none;background:none;cursor:pointer"></label>
     </div>
-    <div class="edrow" style="margin-top:2px">
+    <div class="edrow" style="margin-top:2px;padding-left:0;padding-right:0">
+      <button class="hbtn" id="edFlipH" title="flip layer horizontally">⇋ Flip H</button>
+      <button class="hbtn" id="edFlipV" title="flip layer vertically">⇅ Flip V</button>
+    </div>
+    <div class="edrow" style="margin-top:2px;padding-left:0;padding-right:0">
       <button class="hbtn" id="edUp">↑ layer</button>
       <button class="hbtn" id="edDown">↓ layer</button>
       <button class="hbtn" id="edDel" style="color:#ff9090">✕ delete</button>
     </div>
   </div>
   <div class="edrow">
-    <button class="hbtn" id="edExport">⬇ Export PNG</button>
+    <select id="edExpFmt" title="export format">
+      <option value="image/png" selected>PNG</option>
+      <option value="image/jpeg">JPEG</option>
+      <option value="image/webp">WebP</option>
+    </select>
+    <select id="edExpScale" title="export resolution">
+      <option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+    </select>
+    <label class="sl" id="edExpQWrap">Q <input type="range" id="edExpQ" min="50" max="100" value="92" style="width:56px"><span class="val" id="edExpQV">92</span></label>
+    <button class="hbtn" id="edExport">⬇ Export</button>
     <button class="hbtn" id="edSend">➜ Send to dome</button>
   </div>
 </div>
@@ -984,6 +1058,7 @@ addEventListener("keydown", e => {
     e.preventDefault();
     if (e.shiftKey) edRedo(); else edUndo();
   }
+  else if ((e.code === "Digit0" || e.code === "Numpad0") && editor.open) edRecenter();
 });
 
 /* ------------------- built-in demo show ------------------- */
@@ -1006,7 +1081,10 @@ select(0);
 
 const editor = {
   open: false, base: null, baseName: "", layers: [], sel: null, nextId: 1,
-  liveItem: null,
+  liveItem: null, live: false,
+  tool: "move",                                  // "move" | "brush" | "eraser"
+  brush: { size: 30, opacity: 0.9, color: "#ffd27a" },
+  view: { zoom: 1, panX: 0, panY: 0 },           // stage viewport (zoom = multiple of fit)
   canvas: document.getElementById("edCanvas"),
 };
 editor.ctx = editor.canvas.getContext("2d");
@@ -1017,6 +1095,7 @@ const edProps = document.getElementById("edProps");
 document.getElementById("editBtn").onclick = () => {
   editor.open = !editor.open;
   editorEl.style.display = editor.open ? "flex" : "none";
+  if (editor.open) edApplyView();
 };
 document.getElementById("editClose").onclick = () => {
   editor.open = false;
@@ -1036,6 +1115,7 @@ function edSetBase(src, name){
     editor.sel = null;
     edSnapshot();
     edRender();
+    edRecenter();
   };
   if (typeof src === "string"){ img.onload = apply; img.src = src; }
   else apply();
@@ -1113,10 +1193,15 @@ document.getElementById("edTextBtn").onclick = edAddTextLayer;
 
 let edHist = [], edHistPos = -1;
 
+function edCloneLayer(l){
+  const c = Object.assign({}, l);
+  if (l.adj) c.adj = Object.assign({}, l.adj);   // adjustments must not leak across snapshots
+  return c;                                       // note: l.paint (canvas) stays a shared reference —
+}                                                 // strokes use copy-on-write so history keeps old pixels
 function edCaptureCurrent(){
   return {
     base: editor.base, baseName: editor.baseName,
-    layers: editor.layers.map(l => Object.assign({}, l)),
+    layers: editor.layers.map(edCloneLayer),
     w: editor.canvas.width, h: editor.canvas.height, sel: editor.sel,
   };
 }
@@ -1131,7 +1216,7 @@ function edApplyHist(i){
   if (!s) return;
   editor.base = s.base;
   editor.baseName = s.baseName;
-  editor.layers = s.layers.map(l => Object.assign({}, l));
+  editor.layers = s.layers.map(edCloneLayer);
   editor.canvas.width = s.w;
   editor.canvas.height = s.h;
   editor.sel = s.sel;
@@ -1144,10 +1229,29 @@ document.getElementById("edRedo").onclick = edRedo;
 
 function edSelected(){ return editor.layers.find(l => l.id === editor.sel) || null; }
 
-function edRender(){
-  const c = editor.canvas, ctx = editor.ctx;
-  ctx.clearRect(0, 0, c.width, c.height);
-  if (editor.base) ctx.drawImage(editor.base, 0, 0, c.width, c.height);
+/* pixel dimensions of a layer's drawable source (image or paint canvas) */
+function edLayerDims(l){
+  const src = l.paint || l.img;
+  if (!src) return { w: 0, h: 0 };
+  return { w: src.naturalWidth || src.width, h: src.naturalHeight || src.height };
+}
+
+function edFilterStr(l){
+  const a = l.adj;
+  if (!a || (!a.bri && !a.con && !a.sat && !a.hue)) return "";
+  const parts = [];
+  if (a.bri) parts.push("brightness(" + (1 + a.bri / 100) + ")");
+  if (a.con) parts.push("contrast(" + (1 + a.con / 100) + ")");
+  if (a.sat) parts.push("saturate(" + (1 + a.sat / 100) + ")");
+  if (a.hue) parts.push("hue-rotate(" + a.hue * 1.8 + "deg)");   // ±100 -> ±180°
+  return parts.join(" ");
+}
+
+/* draws the full composite into any 2d context at the canvas's native size */
+function edDraw(ctx, w, h, bg){
+  if (bg){ ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h); }
+  else ctx.clearRect(0, 0, w, h);
+  if (editor.base) ctx.drawImage(editor.base, 0, 0, w, h);
   for (const l of editor.layers){
     if (l.hidden) continue;
     ctx.save();
@@ -1155,7 +1259,7 @@ function edRender(){
     ctx.globalCompositeOperation = l.blend;
     ctx.translate(l.x, l.y);
     ctx.rotate(l.rot);
-    ctx.scale(l.scale, l.scale);
+    ctx.scale(l.scale * (l.flipH ? -1 : 1), l.scale * (l.flipV ? -1 : 1));
     if (l.type === "text"){
       ctx.font = "600 " + l.size + "px system-ui, sans-serif";
       ctx.textAlign = "center";
@@ -1166,14 +1270,28 @@ function edRender(){
       ctx.fillText(l.text, 0, 0);
       ctx.shadowBlur = 0;
     } else {
-      ctx.drawImage(l.img, -l.img.naturalWidth / 2, -l.img.naturalHeight / 2);
+      const src = l.paint || l.img;
+      if (!src) { ctx.restore(); continue; }
+      const { w: sw, h: sh } = edLayerDims(l);
+      const f = edFilterStr(l);
+      if (f) ctx.filter = f;
+      ctx.drawImage(src, -sw / 2, -sh / 2);
     }
     ctx.restore();
   }
+}
+
+function edRender(){
+  const c = editor.canvas;
+  edDraw(editor.ctx, c.width, c.height);
   if (editor.liveItem){
     editor.liveItem.dirty = true;
     editor.liveItem.aspect = c.width / c.height;   // keep dome mapping correct after base changes
   }
+  const sw = document.getElementById("edSizeW"), sh = document.getElementById("edSizeH");
+  if (document.activeElement !== sw) sw.value = c.width;
+  if (document.activeElement !== sh) sh.value = c.height;
+  edApplyView();
   edRenderLayers();
   edRenderProps();
 }
@@ -1198,12 +1316,19 @@ function edRenderLayers(){
       th.style.cssText = "width:26px;text-align:center;color:var(--accent2);font-weight:700";
       th.textContent = "T";
       d.appendChild(th);
+    } else if (l.type === "paint" && !l.img){
+      const th = document.createElement("span");
+      th.style.cssText = "width:26px;text-align:center;color:var(--accent2)";
+      th.textContent = "🖌";
+      d.appendChild(th);
     } else {
       const th = document.createElement("canvas");
       th.width = 26; th.height = 20;
       const tc = th.getContext("2d");
-      const k = Math.min(26 / l.img.naturalWidth, 20 / l.img.naturalHeight);
-      tc.drawImage(l.img, 0, 0, l.img.naturalWidth * k, l.img.naturalHeight * k);
+      const src = l.paint || l.img;
+      const { w: sw, h: sh } = edLayerDims(l);
+      const k = Math.min(26 / sw, 20 / sh);
+      tc.drawImage(src, 0, 0, sw * k, sh * k);
       d.appendChild(th);
     }
     const nm = document.createElement("span");
@@ -1232,6 +1357,22 @@ function edRenderProps(){
   document.getElementById("edRot").value = Math.round(l.rot * 180 / Math.PI);
   document.getElementById("edRotV").textContent = Math.round(l.rot * 180 / Math.PI) + "°";
   document.getElementById("edBlend").value = l.blend;
+  document.getElementById("edFlipH").classList.toggle("on", !!l.flipH);
+  document.getElementById("edFlipV").classList.toggle("on", !!l.flipV);
+  const adjEl = document.getElementById("edAdj");
+  const adjustable = l.type !== "text";
+  adjEl.style.display = adjustable ? "flex" : "none";
+  if (adjustable){
+    const a = l.adj || { bri: 0, con: 0, sat: 0, hue: 0 };
+    document.getElementById("edBri").value = a.bri;
+    document.getElementById("edBriV").textContent = a.bri;
+    document.getElementById("edCon").value = a.con;
+    document.getElementById("edConV").textContent = a.con;
+    document.getElementById("edSat").value = a.sat;
+    document.getElementById("edSatV").textContent = a.sat;
+    document.getElementById("edHue").value = a.hue;
+    document.getElementById("edHueV").textContent = Math.round(a.hue * 1.8) + "°";
+  }
   const tp = document.getElementById("edTextProps");
   tp.style.display = l.type === "text" ? "flex" : "none";
   if (l.type === "text"){
@@ -1256,6 +1397,33 @@ for (const id of ["edOpacity", "edScale", "edRot"])
 document.getElementById("edBlend").addEventListener("change", e => {
   const l = edSelected(); if (l){ l.blend = e.target.value; edSnapshot(); edRender(); }
 });
+
+/* per-layer adjustments (brightness/contrast/saturation/hue), rendered via ctx.filter */
+function edAdj(l){ return l.adj || (l.adj = { bri: 0, con: 0, sat: 0, hue: 0 }); }
+edBindSlider("edBri", (l, v) => edAdj(l).bri = v);
+edBindSlider("edCon", (l, v) => edAdj(l).con = v);
+edBindSlider("edSat", (l, v) => edAdj(l).sat = v);
+edBindSlider("edHue", (l, v) => edAdj(l).hue = v);
+for (const id of ["edBri", "edCon", "edSat", "edHue"]){
+  document.getElementById(id).addEventListener("input", () => {
+    const l = edSelected(); if (!l) return;
+    const a = edAdj(l);
+    document.getElementById("edBriV").textContent = a.bri;
+    document.getElementById("edConV").textContent = a.con;
+    document.getElementById("edSatV").textContent = a.sat;
+    document.getElementById("edHueV").textContent = Math.round(a.hue * 1.8) + "°";
+  });
+  document.getElementById(id).addEventListener("change", edSnapshot);
+}
+
+document.getElementById("edFlipH").onclick = () => {
+  const l = edSelected(); if (!l) return;
+  l.flipH = !l.flipH; edSnapshot(); edRender();
+};
+document.getElementById("edFlipV").onclick = () => {
+  const l = edSelected(); if (!l) return;
+  l.flipV = !l.flipV; edSnapshot(); edRender();
+};
 
 document.getElementById("edText").addEventListener("input", e => {
   const l = edSelected();
@@ -1283,6 +1451,166 @@ document.getElementById("edDel").onclick = () => {
   if (i >= 0){ editor.layers.splice(i, 1); editor.sel = null; edSnapshot(); edRender(); }
 };
 
+/* ---------------- stage viewport: zoom / pan / recenter ---------------- */
+
+const edStageWrap = document.getElementById("edStageWrap");
+const edStageInner = document.getElementById("edStageInner");
+
+function edFitScale(){
+  const wrapW = edStageWrap.clientWidth, wrapH = edStageWrap.clientHeight;
+  if (!wrapW || !wrapH || !editor.canvas.width) return 1;
+  return Math.min(wrapW / editor.canvas.width, wrapH / editor.canvas.height, 1) * 0.96;
+}
+function edApplyView(){
+  const c = editor.canvas;
+  const s = edFitScale() * editor.view.zoom;
+  c.style.width = c.width + "px";
+  c.style.height = c.height + "px";
+  edStageInner.style.transform =
+    "translate(" + (-c.width * s / 2 + editor.view.panX) + "px," +
+                   (-c.height * s / 2 + editor.view.panY) + "px) scale(" + s + ")";
+  document.getElementById("edZoomPct").textContent = Math.round(editor.view.zoom * 100) + "%";
+}
+function edRecenter(){
+  editor.view.zoom = 1; editor.view.panX = 0; editor.view.panY = 0;
+  edApplyView();
+}
+document.getElementById("edRecenter").onclick = edRecenter;
+
+edStageWrap.addEventListener("wheel", e => {
+  e.preventDefault();
+  editor.view.zoom = Math.max(0.25, Math.min(4, editor.view.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
+  edApplyView();
+}, { passive: false });
+
+let edPan = null;
+edStageWrap.addEventListener("pointerdown", e => {
+  if (e.target === editor.canvas || e.target.closest("button")) return;  // canvas drag / recenter btn
+  edPan = { x: e.clientX, y: e.clientY, panX: editor.view.panX, panY: editor.view.panY };
+  edStageWrap.classList.add("panning");
+  edStageWrap.setPointerCapture(e.pointerId);
+});
+edStageWrap.addEventListener("pointermove", e => {
+  if (!edPan) return;
+  editor.view.panX = edPan.panX + (e.clientX - edPan.x);
+  editor.view.panY = edPan.panY + (e.clientY - edPan.y);
+  edApplyView();
+});
+edStageWrap.addEventListener("pointerup", () => { edPan = null; edStageWrap.classList.remove("panning"); });
+
+/* ---------------- brush / eraser stroke engine ----------------
+ * Each image/paint layer owns a pixel canvas (l.paint). Strokes use
+ * copy-on-write: at stroke start the layer's paint canvas is CLONED and the
+ * stroke draws into the clone, so older undo snapshots keep referencing the
+ * untouched pre-stroke canvas. One edSnapshot() per completed stroke. */
+
+let edStroke = null;
+
+function edToLayerSpace(l, p){
+  let dx = p.x - l.x, dy = p.y - l.y;
+  const cs = Math.cos(-l.rot), sn = Math.sin(-l.rot);
+  let lx = (dx * cs - dy * sn) / (l.scale * (l.flipH ? -1 : 1));
+  let ly = (dx * sn + dy * cs) / (l.scale * (l.flipV ? -1 : 1));
+  const { w, h } = edLayerDims(l);
+  return { x: lx + w / 2, y: ly + h / 2 };
+}
+
+function edBlankBase(){
+  if (editor.base || editor.layers.length) return;
+  editor.canvas.width = 1600; editor.canvas.height = 900;
+  editor.baseName = "blank canvas";
+}
+
+function edNewPaintLayer(){
+  const pc = document.createElement("canvas");
+  pc.width = editor.canvas.width; pc.height = editor.canvas.height;
+  const l = { id: editor.nextId++, type: "paint", name: "paint", img: null, paint: pc,
+              x: editor.canvas.width / 2, y: editor.canvas.height / 2,
+              scale: 1, baseScale: 1, rot: 0, opacity: 1, blend: "source-over" };
+  editor.layers.push(l);
+  editor.sel = l.id;
+  return l;
+}
+
+function edStrokeBegin(l){
+  // copy-on-write: older history entries keep pointing at the old canvas
+  const nc = document.createElement("canvas");
+  const pctx = nc.getContext("2d");
+  if (l.paint){ nc.width = l.paint.width; nc.height = l.paint.height; pctx.drawImage(l.paint, 0, 0); }
+  else { nc.width = l.img.naturalWidth; nc.height = l.img.naturalHeight; pctx.drawImage(l.img, 0, 0); }
+  l.paint = nc;
+  return pctx;
+}
+
+function edStampInto(pt){
+  const s = edStroke, ctx = s.ctx, b = editor.brush;
+  const erase = editor.tool === "eraser";
+  const r = Math.max(0.5, b.size / 2 / Math.abs(s.l.scale || 1));
+  ctx.save();
+  ctx.globalCompositeOperation = erase ? "destination-out" : "source-over";
+  ctx.globalAlpha = b.opacity;
+  const col = erase ? "#000000" : b.color;
+  const g = ctx.createRadialGradient(pt.x, pt.y, r * 0.2, pt.x, pt.y, r);
+  g.addColorStop(0, col);
+  g.addColorStop(1, col + "00");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, 6.2832); ctx.fill();
+  ctx.restore();
+}
+
+function edStartStroke(e){
+  const erase = editor.tool === "eraser";
+  edBlankBase();
+  if (edHistPos < 0) edSnapshot();   // fresh editor: record the blank pre-stroke
+                                     // state so the very first stroke is undoable
+                                     // (normal path: an entry already exists — no-op here)
+  let l = edSelected();
+  if (l && l.type === "text") l = null;
+  if (!l){
+    if (!erase) l = edNewPaintLayer();
+    else {
+      for (let i = editor.layers.length - 1; i >= 0; i--)
+        if (editor.layers[i].type !== "text" && !editor.layers[i].hidden){ l = editor.layers[i]; editor.sel = l.id; break; }
+      if (!l) return;   // nothing erasable
+    }
+  }
+  const pctx = edStrokeBegin(l);
+  edStroke = { l, ctx: pctx, last: edToLayerSpace(l, edCanvasPos(e)) };
+  edStampInto(edStroke.last);
+  editor.canvas.setPointerCapture(e.pointerId);
+  edRender();                       // streams every dab live to the dome
+}
+
+function edStrokeMove(e){
+  const pt = edToLayerSpace(edStroke.l, edCanvasPos(e));
+  const last = edStroke.last;
+  const d = Math.hypot(pt.x - last.x, pt.y - last.y);
+  const step = Math.max(1, editor.brush.size / 4 / Math.abs(edStroke.l.scale || 1));
+  const n = Math.min(400, Math.floor(d / step));
+  for (let i = 1; i <= n; i++)
+    edStampInto({ x: last.x + (pt.x - last.x) * i / n, y: last.y + (pt.y - last.y) * i / n });
+  edStroke.last = pt;
+  edRender();
+}
+
+/* tool buttons + brush settings */
+document.getElementById("edTools").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  editor.tool = b.dataset.tool;
+  document.querySelectorAll("#edTools .hbtn").forEach(x => x.classList.toggle("on", x === b));
+  document.getElementById("edBrushProps").style.display = editor.tool === "move" ? "none" : "flex";
+  editor.canvas.classList.toggle("brushing", editor.tool !== "move");
+});
+document.getElementById("edBrushSize").addEventListener("input", e => {
+  editor.brush.size = parseFloat(e.target.value);
+  document.getElementById("edBrushSizeV").textContent = e.target.value;
+});
+document.getElementById("edBrushOp").addEventListener("input", e => {
+  editor.brush.opacity = parseFloat(e.target.value) / 100;
+  document.getElementById("edBrushOpV").textContent = e.target.value + "%";
+});
+document.getElementById("edBrushColor").addEventListener("input", e => editor.brush.color = e.target.value);
+
 /* drag layers on the stage */
 let edDrag = null;
 function edCanvasPos(e){
@@ -1293,6 +1621,7 @@ function edCanvasPos(e){
   };
 }
 editor.canvas.addEventListener("pointerdown", e => {
+  if (editor.tool !== "move"){ edStartStroke(e); return; }
   const p = edCanvasPos(e);
   for (let i = editor.layers.length - 1; i >= 0; i--){
     const l = editor.layers[i];
@@ -1302,7 +1631,9 @@ editor.canvas.addEventListener("pointerdown", e => {
       editor.ctx.font = "600 " + l.size + "px system-ui, sans-serif";
       r = Math.max(editor.ctx.measureText(l.text).width, l.size) * l.scale / 2 + 12;
     } else {
-      r = Math.max(l.img.naturalWidth, l.img.naturalHeight) * l.scale / 2;
+      const { w, h } = edLayerDims(l);
+      if (!w) continue;
+      r = Math.max(w, h) * l.scale / 2;
     }
     if (Math.hypot(p.x - l.x, p.y - l.y) <= r){
       editor.sel = l.id;
@@ -1314,6 +1645,7 @@ editor.canvas.addEventListener("pointerdown", e => {
   }
 });
 editor.canvas.addEventListener("pointermove", e => {
+  if (edStroke){ edStrokeMove(e); return; }
   if (!edDrag) return;
   const l = editor.layers.find(x => x.id === edDrag.id);
   if (!l) return;
@@ -1323,21 +1655,67 @@ editor.canvas.addEventListener("pointermove", e => {
   l.y = p.y - edDrag.dy;
   edRender();
 });
-editor.canvas.addEventListener("pointerup", () => edDrag = null);
+editor.canvas.addEventListener("pointerup", () => {
+  if (edStroke){ edStroke = null; edSnapshot(); edRender(); }   // one undo step per stroke
+  edDrag = null;
+});
 
-/* export / send-to-dome */
+/* ---------------- canvas crop / resize ---------------- */
+document.getElementById("edResize").onclick = () => {
+  const w = Math.max(16, Math.min(4096, parseInt(document.getElementById("edSizeW").value, 10) || 0));
+  const h = Math.max(16, Math.min(4096, parseInt(document.getElementById("edSizeH").value, 10) || 0));
+  if (!w || !h || (w === editor.canvas.width && h === editor.canvas.height)) return;
+  edBlankBase();
+  edSnapshot();
+  const ow = editor.canvas.width, oh = editor.canvas.height;
+  const kx = w / ow, ky = h / oh;
+  editor.canvas.width = w; editor.canvas.height = h;
+  for (const l of editor.layers){
+    l.x *= kx; l.y *= ky;
+    if (l.type === "paint" && l.paint){
+      // whole-canvas paint layers rescale their pixels too (copy-on-write)
+      const nc = document.createElement("canvas");
+      nc.width = w; nc.height = h;
+      nc.getContext("2d").drawImage(l.paint, 0, 0, w, h);
+      l.paint = nc;
+    }
+  }
+  edRender();
+  edRecenter();
+};
+
+/* ---------------- multi-format export ---------------- */
+document.getElementById("edExpQ").addEventListener("input", e =>
+  document.getElementById("edExpQV").textContent = e.target.value);
+document.getElementById("edExpFmt").addEventListener("change", e =>
+  document.getElementById("edExpQWrap").style.visibility = e.target.value === "image/png" ? "hidden" : "visible");
+document.getElementById("edExpQWrap").style.visibility = "hidden";   // PNG has no quality setting
 document.getElementById("edExport").onclick = () => {
-  if (!editor.base) return;
-  editor.canvas.toBlob(b => {
+  if (!editor.base && !editor.layers.length) return;
+  const fmt = document.getElementById("edExpFmt").value;
+  const scale = parseFloat(document.getElementById("edExpScale").value) || 1;
+  const q = parseFloat(document.getElementById("edExpQ").value) / 100;
+  const oc = document.createElement("canvas");
+  oc.width = Math.round(editor.canvas.width * scale);
+  oc.height = Math.round(editor.canvas.height * scale);
+  const octx = oc.getContext("2d");
+  octx.scale(scale, scale);
+  edDraw(octx, editor.canvas.width, editor.canvas.height, fmt === "image/jpeg" ? "#000" : null);
+  oc.toBlob(b => {
+    if (!b) return;
     const a = document.createElement("a");
+    const ext = fmt === "image/png" ? "png" : fmt === "image/webp" ? "webp" : "jpg";
     a.href = URL.createObjectURL(b);
-    a.download = "opendome-edit.png";
+    a.download = "stardome-composite." + ext;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  }, "image/png");
+  }, fmt, q);
 };
-document.getElementById("edSend").onclick = () => {
-  if (!editor.base) return;
+
+/* ---------------- send to dome / live link ---------------- */
+function edSendToDome(selectIt){
+  edBlankBase();
+  edRender();
   if (!editor.liveItem || !state.playlist.includes(editor.liveItem)){
     const item = makeItem("canvas", "🎨 Editor composite", null);
     item.el = editor.canvas;
@@ -1349,7 +1727,13 @@ document.getElementById("edSend").onclick = () => {
   }
   editor.liveItem.aspect = editor.canvas.width / editor.canvas.height;
   editor.liveItem.dirty = true;
-  select(state.playlist.indexOf(editor.liveItem));
+  if (selectIt !== false) select(state.playlist.indexOf(editor.liveItem));
+}
+document.getElementById("edSend").onclick = () => edSendToDome(true);
+document.getElementById("edLive").onclick = () => {
+  editor.live = !editor.live;
+  document.getElementById("edLive").classList.toggle("on", editor.live);
+  if (editor.live) edSendToDome(true);   // create + select the composite; edRender streams every edit
 };
 
 /* ------------------- record dome output ------------------- */
