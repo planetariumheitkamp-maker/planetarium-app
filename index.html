@@ -148,6 +148,21 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
 .staff-role { font-size:12px; color:var(--surface); font-weight:500; margin-bottom:4px;}
 .staff-time { font-size:10px; color:var(--muted-dark); display:block; margin-top:4px;}
 
+/* MANUAL / HELP GUIDE */
+.manual-search { width:100%; background:var(--card-bg); border:1px solid var(--border-light); color:var(--text-dark); border-radius:12px; padding:14px 16px 14px 42px; font-size:15px; font-family:var(--font); outline:none; margin-bottom:12px; }
+.manual-search:focus { border-color:var(--accent); }
+.manual-search-wrap { position:relative; }
+.manual-search-wrap::before { content:'🔍'; position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:15px; opacity:0.6; pointer-events:none; }
+.manual-chips { display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:14px; -webkit-overflow-scrolling:touch; }
+.manual-chips::-webkit-scrollbar { display:none; }
+.chip { flex-shrink:0; padding:7px 14px; border-radius:999px; font-size:12px; font-weight:600; border:1.5px solid var(--border-light); background:var(--card-bg); color:var(--muted-dark); cursor:pointer; transition:all 0.15s ease; }
+.chip.active { background:var(--surface); border-color:var(--surface); color:var(--text-light); }
+.manual-topic-chevron { transition:transform 0.25s ease; font-size:14px; color:var(--muted-dark); flex-shrink:0; }
+.manual-topic-chevron.open { transform:rotate(90deg); }
+.manual-topic-body { overflow:hidden; }
+.manual-cat-badge { padding:4px 10px; border-radius:999px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; background:rgba(68,45,125,0.08); color:var(--surface); flex-shrink:0; }
+body.dark-mode .manual-cat-badge { background:rgba(209,184,136,0.15); color:var(--accent); }
+
 /* QR Modal & Others */
 #qrModal { display:none; position:fixed; inset:0; background:#000; z-index:2000; flex-direction:column; }
 #qrModal.active { display:flex; }
@@ -199,6 +214,7 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
             </div>
             
             <button class="btn btn-primary" style="margin-top:24px;" onclick="verifyLogin()" id="loginBtn">Login</button>
+            <button style="margin-top:16px; width:100%; background:transparent; border:none; color:var(--muted-dark); font-family:var(--font); font-size:13px; text-decoration:underline; cursor:pointer;" onclick="openForgotModal()">Forgot Password?</button>
         </div>
         
         <button style="margin-top:30px; background:transparent; border:none; color:var(--accent); font-family:var(--font); font-size:14px; text-decoration:underline; cursor:pointer;" onclick="toggleRegisterView(true)">Create New Account</button>
@@ -336,6 +352,40 @@ body, .mobile-card, .bottom-nav, .modal, .form-group input, .form-group select, 
     </div>
 </div>
 
+<div class="modal-bg" id="forgotModal">
+    <div class="modal">
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:8px; text-align:center;">Forgot Password</h3>
+        <p style="color:var(--muted-dark); font-size:14px; margin-bottom:24px; text-align:center;">Enter your account email and we'll send your password to your inbox.</p>
+        <div class="form-group">
+            <label>Account Email</label>
+            <input type="email" id="forgotEmail" placeholder="e.g. jdoe@school.edu" style="text-align:center;">
+        </div>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:32px;">
+            <button class="btn btn-primary" id="forgotBtn" onclick="sendPasswordEmail()">Email Me My Password</button>
+            <button class="btn btn-outline" onclick="closeModal('forgotModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-bg" id="manualEntryModal">
+    <div class="modal">
+        <h3 style="color:var(--text-dark); font-size:20px; margin-bottom:20px;" id="manualEntryModalTitle">Add Manual Topic</h3>
+        <input type="hidden" id="manualEntryId">
+        <div class="form-group"><label>Topic Title</label><input type="text" id="manualEntryTitle" placeholder="e.g. How to run a public show"></div>
+        <div class="form-group">
+            <label>Category</label>
+            <input type="text" id="manualEntryCategory" list="manualCategoryList" placeholder="e.g. Shows, Tickets, App Basics">
+            <datalist id="manualCategoryList"></datalist>
+        </div>
+        <div class="form-group"><label>Instructions / Information</label><textarea id="manualEntryContent" rows="8" placeholder="Step-by-step instructions go here..." style="width:100%;background:var(--card-bg);border:1px solid var(--border-light);color:var(--text-dark);border-radius:12px;padding:16px;font-size:15px;font-family:var(--font);outline:none;resize:vertical;"></textarea></div>
+        <div style="display:flex; gap:12px; margin-top:20px;">
+            <button class="btn btn-outline" style="flex:1; border-color:var(--danger); color:var(--danger); display:none;" id="btnDeleteManualEntry" onclick="deleteManualEntry()">Delete</button>
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal('manualEntryModal')">Cancel</button>
+            <button class="btn btn-primary" style="flex:1.5;" onclick="saveManualEntry()">Save Topic</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal-bg" id="archiveModal">
     <div class="modal">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -434,6 +484,14 @@ let APP = {
         {id:1, name:'Alice President', role:'president', username:'alice@school.edu', password:'password123', darkMode: false, maxHours: 40} 
     ],
     settings: { inviteKey: 'STARLIGHT', notifsEnabled: true, pauseShows: false },
+    manual: [
+        { id: 1, category: 'App Basics', title: 'Logging in & your account', content: 'Open the app and tap the splash screen. Enter your school email and password on the Staff Portal Login screen.\n\nForgot your password? Tap "Forgot Password?" on the login screen and it will be emailed to you.\n\nTo change your password later: Settings → My Account → Change Password.' },
+        { id: 2, category: 'Shows', title: 'Adding a public show', content: 'Go to the Schedule tab. Tap "+ Add Public Show" (admins only). Fill in the title, date, time, location, expected size and max capacity, then tap Save Event.\n\nPublic shows appear on the public booking page automatically.' },
+        { id: 3, category: 'Shows', title: 'Adding a private group visit', content: 'Go to the Schedule tab. Tap "+ Add Private Group" (admins only). Enter the group name, client email, date and time, then Save Event.\n\nThe client email is used if the visit ever needs to be rescheduled.' },
+        { id: 4, category: 'Tickets', title: 'Scanning QR tickets at the door', content: 'Go to the Schedule tab and tap "📷 Scan QR Tickets". Point the camera at the guest\'s ticket.\n\nA green toast means the guest is admitted. Each ticket can only be scanned once — a rejected ticket has already been used.' },
+        { id: 5, category: 'Staff', title: 'Managing staff roles & hour limits', content: 'Go to Settings → Admin Controls → Manage Roles. Use the dropdown to set a member as Staff, Manager or President, and set their weekly hour limit.\n\nThere must always be at least one President.' },
+        { id: 6, category: 'App Basics', title: 'Dark mode', content: 'Go to Settings → Appearance and toggle Dark Mode. Your preference is saved to your account and follows you on every device.' }
+    ],
     currentUser: null
 };
 
@@ -504,7 +562,8 @@ async function pushCloudData() {
         requests: serialize(APP.requests),
         time: APP.time,
         timeLogs: APP.timeLogs,
-        settings: APP.settings
+        settings: APP.settings,
+        manual: APP.manual
     };
 
     try {
@@ -534,6 +593,11 @@ function parseBlocks(val) {
     if (typeof val === 'string') { try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch(e) { return []; } }
     return Array.isArray(val) ? val : [];
 }
+function parseManual(val) {
+    if (!val) return [];
+    if (typeof val === 'string') { try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch(e) { return []; } }
+    return Array.isArray(val) ? val : [];
+}
 
 async function backgroundSync(forceRender = false) {
     if (API_URL === "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE") return;
@@ -551,6 +615,7 @@ async function backgroundSync(forceRender = false) {
             if (data.users && data.users.length > 0) {
                     APP.users = data.users.map(u => ({...u, blocks: parseBlocks(u.blocks)}));
             }
+            if (data.manual) APP.manual = parseManual(data.manual);
             
             APP.settings = data.settings || { inviteKey: 'STARLIGHT', notifsEnabled: true, pauseShows: false };
             
@@ -979,7 +1044,7 @@ function initWorkerApp() {
     let navHTML = `
         <div class="nav-item" onclick="wNav('events', this)"><div class="icon">📅</div>Schedule</div>
         <div class="nav-item" onclick="wNav('schedule', this)"><div class="icon">🗓️</div>Availability</div>
-        <div class="nav-item" onclick="wNav('time', this)"><div class="icon">⏱️</div>Timeclock</div>
+        <div class="nav-item" onclick="wNav('manual', this)"><div class="icon">📖</div>Manual</div>
         <div class="nav-item" onclick="wNav('settings', this)"><div class="icon">⚙️</div>Settings</div>
     `;
     document.getElementById('bottomNav').innerHTML = navHTML;
@@ -995,7 +1060,7 @@ function wNav(page, element) {
         const items = document.querySelectorAll('.nav-item');
         if(page === 'events' && items.length > 0) items[0].classList.add('active');
         if(page === 'schedule' && items.length > 1) items[1].classList.add('active');
-        if(page === 'time' && items.length > 2) items[2].classList.add('active');
+        if(page === 'manual' && items.length > 2) items[2].classList.add('active');
         if(page === 'settings' && items.length > 3) items[3].classList.add('active');
     }
     renderCurrentPage();
@@ -1218,93 +1283,8 @@ function renderCurrentPage() {
         </div>`;
     }
 
-    else if(currentAppPage === 'time') {
-        const adminBtn = isAdmin ? `<button style="background:transparent; border:none; color:var(--accent); text-decoration:underline; font-size:12px;" onclick="document.getElementById('editMaxHoursModal').classList.add('open')">Edit Max</button>` : '';
-        const currentSession = isClockedIn ? ((new Date() - clockInTime) / 60000).toFixed(0) : 0;
-
-        const myLogs = (APP.timeLogs || []).filter(l => l.staffId === APP.currentUser.id).reverse();
-        const myTotalHours = myLogs.reduce((sum, l) => sum + (Number(l.minutes)/60), 0);
-        const myMaxHours = APP.currentUser.maxHours ?? 40;
-
-        const historyHTML = myLogs.slice(0, 5).map(l => `
-            <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border-light); font-size:14px;">
-                <span style="color:var(--text-dark); font-weight:600;">📅 ${l.date}</span>
-                <span style="color:var(--success); font-weight:700;">+${(l.minutes/60).toFixed(2)} hrs</span>
-            </div>
-        `).join('') || '<p style="font-size:12px; color:var(--muted-dark); padding-top:10px;">No recent shifts logged.</p>';
-
-        let adminRosterHTML = '';
-        if (isAdmin) {
-            const rosterStats = APP.users.map(u => {
-                const uLogs = (APP.timeLogs || []).filter(l => l.staffId === u.id);
-                const uHrs = uLogs.reduce((sum, l) => sum + (Number(l.minutes)/60), 0);
-                const uMax = u.maxHours ?? 40;
-                const pct = Math.min((uHrs / uMax) * 100, 100);
-                const overLimit = uHrs > uMax;
-                return `
-                <div style="padding:12px 0; border-bottom:1px solid var(--border-light);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <div class="staff-avatar" style="width:28px; height:28px; font-size:12px;">${u.name.charAt(0)}</div>
-                            <span style="color:var(--text-dark); font-size:14px; font-weight:600;">${u.name}</span>
-                        </div>
-                        <span style="color:${overLimit ? 'var(--danger)' : 'var(--surface)'}; font-weight:700; font-size:13px;">${uHrs.toFixed(2)} / ${uMax} hrs</span>
-                    </div>
-                    <div class="progress-container" style="height:10px; margin-top:0;">
-                        <div class="progress-bar ${overLimit ? '' : 'personal'}" style="width: ${pct}%; ${overLimit ? 'background:var(--danger);' : ''}"></div>
-                    </div>
-                </div>`;
-            }).join('');
-
-            adminRosterHTML = `
-            <div class="mobile-card" style="margin-top:20px;">
-                <strong style="color:var(--text-dark); margin-bottom:8px; display:block;">Admin: Staff Hours vs. Allotment</strong>
-                ${rosterStats}
-                <p style="font-size:11px; color:var(--muted-dark); margin-top:12px;">Set individual limits in Settings → Manage Roles.</p>
-            </div>`;
-        }
-
-        main.innerHTML = `<div class="wpage active">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h2 style="color:var(--text-dark);">Timeclock</h2>
-                <button class="btn btn-small btn-outline" style="border-width:1px; width:auto; padding:6px 10px; font-size:11px;" onclick="openManualTimeModal()">+ Manual Entry</button>
-            </div>
-            
-            <div class="mobile-card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong style="color:var(--text-dark);">Department Total Hours</strong>
-                    ${adminBtn}
-                </div>
-                <div class="progress-container">
-                    <div class="progress-bar" style="width: ${Math.min((APP.time.total / APP.time.max) * 100, 100)}%"></div>
-                </div>
-                <p style="font-size:12px; color:var(--muted-dark); text-align:right; margin-top:4px;">${APP.time.total.toFixed(1)} / ${APP.time.max} hrs</p>
-            </div>
-
-            <div class="mobile-card">
-                <strong style="color:var(--text-dark);">Your Hours</strong>
-                <div class="progress-container">
-                    <div class="progress-bar personal" style="width: ${Math.min((myTotalHours/myMaxHours)*100, 100)}%"></div>
-                </div>
-                <p style="font-size:12px; color:var(--muted-dark); text-align:right; margin-top:4px;">${myTotalHours.toFixed(2)} / ${myMaxHours} hrs allotted</p>
-                
-                <div style="margin-top:30px; text-align:center;">
-                    <p style="font-size:12px; color:var(--muted-dark); text-transform:uppercase;">Current Session</p>
-                    <p style="font-size:36px; font-weight:700; margin-bottom:16px; color:var(--surface);" id="sessionTimeDisplay">${currentSession} mins</p>
-                    ${isClockedIn 
-                        ? `<button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); padding:16px; font-size:16px;" onclick="toggleClock()">Stop Work</button>`
-                        : `<button class="btn btn-primary" style="background:var(--success); padding:16px; font-size:16px;" onclick="toggleClock()">Clock In</button>`
-                    }
-                </div>
-            </div>
-
-            <div class="mobile-card">
-                <strong style="color:var(--text-dark); margin-bottom:8px; display:block;">Your Recent Shifts</strong>
-                ${historyHTML}
-            </div>
-
-            ${adminRosterHTML}
-        </div>`;
+    else if(currentAppPage === 'manual') {
+        renderManualPage(main, isAdmin);
     }
 
     else if(currentAppPage === 'schedule') {
@@ -1382,6 +1362,184 @@ function renderCurrentPage() {
             </div>
         </div>`;
     }
+}
+
+// ============================================================================
+// PLANETARIUM MANUAL (SEARCHABLE HELP GUIDE)
+// ============================================================================
+let manualSearchQuery = '';
+let manualCategoryFilter = 'All';
+let expandedManualId = null;
+
+function getManualCategories() {
+    const cats = [...new Set((APP.manual || []).map(m => m.category || 'General'))];
+    return cats.sort();
+}
+
+function setManualSearch(val) {
+    manualSearchQuery = val;
+    renderCurrentPage();
+    const el = document.getElementById('manualSearchInput');
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+}
+
+function setManualCategory(cat) {
+    manualCategoryFilter = cat;
+    renderCurrentPage();
+}
+
+function toggleManualTopic(id) {
+    expandedManualId = (expandedManualId === id) ? null : id;
+    renderCurrentPage();
+}
+
+function renderManualPage(main, isAdmin) {
+    const q = manualSearchQuery.trim().toLowerCase();
+    const categories = getManualCategories();
+
+    let topics = (APP.manual || []).slice().sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    if (manualCategoryFilter !== 'All') topics = topics.filter(t => (t.category || 'General') === manualCategoryFilter);
+    if (q) topics = topics.filter(t => (`${t.title || ''} ${t.content || ''} ${t.category || ''}`).toLowerCase().includes(q));
+
+    const chipsHTML = ['All', ...categories].map(c =>
+        `<div class="chip ${manualCategoryFilter === c ? 'active' : ''}" data-cat="${encodeURIComponent(c)}" onclick="setManualCategory(decodeURIComponent(this.dataset.cat))">${sanitize(c)}</div>`
+    ).join('');
+
+    const cardsHTML = topics.map(t => {
+        const open = expandedManualId === t.id;
+        return `
+        <div class="mobile-card clickable" onclick="toggleManualTopic(${t.id})">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <div class="card-title" style="padding-right:0;">${sanitize(t.title)}</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="manual-cat-badge">${sanitize(t.category || 'General')}</span>
+                    <span class="manual-topic-chevron ${open ? 'open' : ''}">▶</span>
+                </div>
+            </div>
+            ${open ? `
+            <div class="manual-topic-body" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-light);">
+                <p style="font-size:14px; color:var(--text-dark); line-height:1.6; white-space:pre-wrap;">${sanitize(t.content)}</p>
+                ${isAdmin ? `<button class="btn btn-small btn-outline" style="width:auto; margin-top:14px;" onclick="event.stopPropagation(); openManualEntryModal(${t.id})">✏️ Edit Topic</button>` : ''}
+            </div>` : ''}
+        </div>`;
+    }).join('');
+
+    const emptyHTML = `<div class="mobile-card" style="text-align:center; padding:32px 16px;">
+        <div style="font-size:32px; margin-bottom:8px;">🔭</div>
+        <p style="color:var(--muted-dark); font-size:14px;">${(q || manualCategoryFilter !== 'All') ? 'No topics match your search.' : 'No manual topics yet.'}</p>
+        ${(isAdmin && !q && manualCategoryFilter === 'All') ? '<p style="color:var(--muted-dark); font-size:12px; margin-top:6px;">Tap "+ Add Topic" to write the first one.</p>' : ''}
+    </div>`;
+
+    main.innerHTML = `<div class="wpage active">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h2 style="color:var(--text-dark);">Planetarium Manual</h2>
+            ${isAdmin ? `<button class="btn btn-small btn-primary" style="width:auto;" onclick="openManualEntryModal(null)">+ Add Topic</button>` : ''}
+        </div>
+        <div class="manual-search-wrap">
+            <input type="text" class="manual-search" id="manualSearchInput" placeholder="Search topics..." value="${sanitize(manualSearchQuery)}" oninput="setManualSearch(this.value)">
+        </div>
+        <div class="manual-chips">${chipsHTML}</div>
+        ${topics.length ? cardsHTML : emptyHTML}
+    </div>`;
+}
+
+function openManualEntryModal(id) {
+    document.getElementById('manualCategoryList').innerHTML = getManualCategories()
+        .map(c => `<option value="${sanitize(c)}"></option>`).join('');
+
+    const delBtn = document.getElementById('btnDeleteManualEntry');
+    if (id) {
+        const t = (APP.manual || []).find(m => m.id === id);
+        if (!t) return;
+        document.getElementById('manualEntryModalTitle').textContent = 'Edit Manual Topic';
+        document.getElementById('manualEntryId').value = t.id;
+        document.getElementById('manualEntryTitle').value = t.title || '';
+        document.getElementById('manualEntryCategory').value = t.category || '';
+        document.getElementById('manualEntryContent').value = t.content || '';
+        delBtn.style.display = 'flex';
+    } else {
+        document.getElementById('manualEntryModalTitle').textContent = 'Add Manual Topic';
+        document.getElementById('manualEntryId').value = '';
+        document.getElementById('manualEntryTitle').value = '';
+        document.getElementById('manualEntryCategory').value = (manualCategoryFilter !== 'All') ? manualCategoryFilter : '';
+        document.getElementById('manualEntryContent').value = '';
+        delBtn.style.display = 'none';
+    }
+    document.getElementById('manualEntryModal').classList.add('open');
+}
+
+async function saveManualEntry() {
+    const idVal = document.getElementById('manualEntryId').value;
+    const title = document.getElementById('manualEntryTitle').value.trim();
+    const category = document.getElementById('manualEntryCategory').value.trim() || 'General';
+    const content = document.getElementById('manualEntryContent').value.trim();
+
+    if (!title) return showToast('Please enter a topic title.', 'error');
+    if (!content) return showToast('Please add some instructions.', 'error');
+
+    if (!APP.manual) APP.manual = [];
+    if (idVal) {
+        const t = APP.manual.find(m => m.id == idVal);
+        if (t) { t.title = title; t.category = category; t.content = content; }
+    } else {
+        APP.manual.push({ id: Date.now(), title: title, category: category, content: content });
+    }
+
+    closeModal('manualEntryModal');
+    showToast(idVal ? 'Topic updated!' : 'Topic added to the manual!');
+    renderCurrentPage();
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+async function deleteManualEntry() {
+    const idVal = document.getElementById('manualEntryId').value;
+    if (!idVal) return;
+    if (!confirm('Delete this manual topic? This cannot be undone.')) return;
+
+    APP.manual = (APP.manual || []).filter(m => m.id != idVal);
+    closeModal('manualEntryModal');
+    showToast('Topic deleted.');
+    renderCurrentPage();
+    document.getElementById('cloud-syncing').classList.add('active');
+    await pushCloudData();
+    document.getElementById('cloud-syncing').classList.remove('active');
+}
+
+// ============================================================================
+// FORGOT PASSWORD (emails the password via the Google Apps Script backend)
+// ============================================================================
+function openForgotModal() {
+    // Pre-fill with whatever the user already typed into the login box
+    document.getElementById('forgotEmail').value = document.getElementById('loginUsername').value.trim();
+    document.getElementById('forgotModal').classList.add('open');
+}
+
+async function sendPasswordEmail() {
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email) return showToast('Please enter your account email.', 'error');
+    if (!validateEmail(email)) return showToast('Please enter a valid email address.', 'error');
+
+    setLoading('forgotBtn', true);
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'forgotPassword', email: email })
+        });
+        const result = await response.json();
+        if (result && result.success === false) throw new Error(result.message || 'Server error');
+        closeModal('forgotModal');
+        // Deliberately vague so the app doesn't reveal which emails are registered
+        showToast('If that email is registered, the password is on its way! 📬');
+        document.getElementById('forgotEmail').value = '';
+    } catch (err) {
+        console.error('Password email failed:', err);
+        showToast('Could not reach the server. Please try again.', 'error');
+    }
+    setLoading('forgotBtn', false);
 }
 
 // ============================================================================
@@ -2027,7 +2185,7 @@ if ("Notification" in window && Notification.permission !== "denied") { Notifica
 function saveMaxHours() {
     const input = document.getElementById('maxHoursInput').value;
     if(input) { APP.time.max = parseInt(input); pushCloudData(); }
-    closeModal('editMaxHoursModal'); wNav('time');
+    closeModal('editMaxHoursModal'); wNav('manual');
 }
 
 function openManualTimeModal() {
