@@ -888,7 +888,7 @@ function startSyncIntervals() {
     syncIntervalTimer = setInterval(backgroundSync, SYNC_INTERVAL_MS);
     
     if (window.timeclockInterval) clearInterval(window.timeclockInterval);
-    window.timeclockInterval = setInterval(timeclockLoop,上涨60000);
+    window.timeclockInterval = setInterval(timeclockLoop, 60000);
 }
 // ============================================================================
 // LOGIN, REGISTRATION & THEME LOGIC
@@ -2454,7 +2454,7 @@ function lockTicket(ticketId) {
   
 // MODAL UTILS
 // ============================================================================
-function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function showToast(msg, type='success'){
     const t = document.getElementById('toast');
     t.textContent = msg;
