@@ -231,7 +231,7 @@
             <div class="form-group"><label>Contact Person</label><input type="text" id="contactName" placeholder="First and last name"></div>
             <div class="form-group"><label>Email Address</label><input type="email" id="contactEmail" placeholder="email@example.com"></div>
             <div class="form-group"><label>Estimated Number of Attendees</label><input type="number" id="groupSize" placeholder="e.g. 45"></div>
-            <div class="form-group"><label>What topics are you interested in?</label><textarea id="topics" placeholder="e.g. Solar System, Constellations... 
+            <div class="form-group"><label>What topics are you interested in?</label><textarea id="topics" placeholder="e.g. Solar System, Constellations...
 Or if there is no preference put N/A"></textarea></div>
             <div style="display:flex; gap:12px;">
                 <button class="btn btn-ghost" style="flex:1;" onclick="prevStep(2)">← Back</button>
@@ -306,7 +306,7 @@ Or if there is no preference put N/A"></textarea></div>
 
 <script>
 // ==========================================
-const API_URL = "https://script.google.com/macros/s/AKfycbzOpkrJWifCVR8u0WeiDl5ywOTQvWdCKHh9_Z_z5rf2adta3Y1194sRyfs8fHzt4OffBQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwyOqNlttLZ4KyiBvchUPwlyHvAMPXTSBN3lfztxIqwIgah7SdqoIFhOicrDuAWX4l7vw/exec";
 const REFRESH_MS = 30000;
 // ==========================================
 
@@ -732,35 +732,47 @@ async function submitBooking() {
     btn.textContent = 'Processing...';
 
     try {
+        const publicAppUrl = window.location.href.split('?')[0];
+        const ticketUrl = `${publicAppUrl}?ticket=${evId}&name=${encodeURIComponent(name)}&title=${encodeURIComponent(show.title)}&date=${encodeURIComponent(show.date)}&time=${encodeURIComponent(show.time || '')}&count=${count}`;
         const payload = {
             action: 'reserve_seats',
             eventId: evId,
             count: count,
-            publicAppUrl: window.location.href.split('?')[0],
+            publicAppUrl: publicAppUrl,
             emailData: {
                 name: name,
                 email: email,
                 showTitle: show.title,
-                showDate: `${formatEventDate(show.date)} @ ${formatTime(show.time)}`
+                showDate: `${formatEventDate(show.date)} @ ${formatTime(show.time)}`,
+                ticketUrl: ticketUrl
             }
         };
 
-        await fetch(API_URL, {
+        const response = await fetch(API_URL, {
             method: 'POST',
             redirect: 'follow',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
         });
+        const result = await response.json();
+        if(!result.success || result.action !== 'reserve_seats') {
+            throw new Error(result.message || "The ticket service is updating. Please try again shortly.");
+        }
 
         let localBookings = JSON.parse(localStorage.getItem('planetarium_bookings')) || {};
         localBookings[evId] = (localBookings[evId] || 0) + count;
         localStorage.setItem('planetarium_bookings', JSON.stringify(localBookings));
 
         closeBookingModal();
-        const ticketUrl = `${window.location.pathname}?ticket=${evId}&name=${encodeURIComponent(name)}&title=${encodeURIComponent(show.title)}&date=${encodeURIComponent(show.date)}&time=${encodeURIComponent(show.time || '')}&count=${count}`;
+        if(result.emailSent === false) {
+            alert("Your reservation is confirmed, but the email could not be sent. Please save the ticket page that opens next.");
+        }
         window.location.href = ticketUrl;
     } catch(e) {
-        modalError("Connection failed — your seats were NOT booked. Please try again.");
+        const message = e && e.message && !/failed to fetch|networkerror/i.test(e.message)
+            ? e.message
+            : "Connection failed — your seats were NOT booked. Please try again.";
+        modalError(message);
         btn.disabled = false;
         btn.textContent = 'Confirm Reservation';
     }
@@ -821,7 +833,9 @@ async function submitGroupRequest() {
             body: JSON.stringify(payload)
         });
         const result = await response.json();
-        if(!result.success) throw new Error(result.message || "Unknown error");
+        if(!result.success || result.action !== 'submitBooking') {
+            throw new Error(result.message || "The booking service is updating. Please try again shortly.");
+        }
 
         document.getElementById('step2').classList.remove('active');
         document.getElementById('confirmEmail').textContent = email;
