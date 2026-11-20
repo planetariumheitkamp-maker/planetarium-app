@@ -1,23 +1,22 @@
 /**
  * ============================================================================
- * PLANETARIUM STAFF APP — GOOGLE APPS SCRIPT BACKEND (Code.gs)
+ * PLANETARIUM STAFF + PUBLIC BOX OFFICE — GOOGLE APPS SCRIPT BACKEND
  * ============================================================================
- * This is the complete backend for the Planetarium Staff App. It stores all
- * app data in the Google Sheet this script is bound to and serves it to the
- * app over HTTPS.
+ * This is the complete shared backend for the staff app and public ticket site.
+ * It stores all app data in the bound Google Sheet and serves it over HTTPS.
  *
  * SETUP
  *   1. Open your Google Sheet → Extensions → Apps Script.
- *   2. Replace the contents of Code.gs with this file (or, if you prefer to
- *      keep your existing script, only copy the two marked "NEW" blocks —
- *      see backend/README.md for exactly what to add).
+ *   2. Replace the contents of Code.gs with this file.
  *   3. Deploy → Manage deployments → pencil icon → New version → Deploy.
  *
  * SHEETS USED (created automatically if missing):
  *   Users, Events, Requests, Time, TimeLogs, Settings, Manual
  *
- * WHAT'S NEW IN THIS VERSION
- *   • forgotPassword action — emails a staff member their password.
+ * INCLUDED ACTIONS
+ *   • forgotPassword — emails a staff member their password.
+ *   • reserve_seats — safely reserves public tickets and emails the QR wallet.
+ *   • submitBooking — adds a pending private-group request.
  *   • Manual sheet — stores the searchable Planetarium Manual topics.
  * ============================================================================
  */
@@ -32,20 +31,164 @@ function doGet() {
 
 function doPost(e) {
   var payload = {};
-  try { payload = JSON.parse(e.postData.contents); } catch (err) { payload = {}; }
+  try {
+    payload = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return jsonResponse_({ success: false, message: 'Invalid JSON request.' });
+  }
 
-  // ── NEW BLOCK 1: FORGOT PASSWORD ────────────────────────────────────────
-  // The login screen sends { action: 'forgotPassword', email: '...' }.
-  // We email the staff member their password and always answer success so
-  // the app never reveals which emails are registered.
+  // Never reveal whether a staff email is registered.
   if (payload.action === 'forgotPassword') {
     handleForgotPassword_(String(payload.email || ''));
     return jsonResponse_({ success: true });
   }
-  // ── END NEW BLOCK 1 ─────────────────────────────────────────────────────
 
-  writeAllData_(payload);
-  return jsonResponse_({ success: true });
+  // Serialize writes so simultaneous public bookings cannot overwrite each other.
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+
+    if (payload.action === 'reserve_seats') {
+      return jsonResponse_(handleReserveSeats_(payload));
+    }
+    if (payload.action === 'submitBooking') {
+      return jsonResponse_(handleSubmitBooking_(payload));
+    }
+
+    writeAllData_(payload);
+    return jsonResponse_({ success: true });
+  } catch (err) {
+    return jsonResponse_({
+      success: false,
+      message: err && err.message ? err.message : 'The request could not be saved.'
+    });
+  } finally {
+    try { lock.releaseLock(); } catch (err) {}
+  }
+}
+
+// Public box office: increment reserved seats and email the ticket wallet.
+function handleReserveSeats_(payload) {
+  var eventId = String(payload.eventId || '').trim();
+  var count = Number(payload.count);
+  if (!eventId) throw new Error('A show is required.');
+  if (!isFinite(count) || count < 1 || Math.floor(count) !== count) {
+    throw new Error('The ticket quantity is invalid.');
+  }
+
+  var sheet = getOrCreateSheet_('Events', null);
+  var events = readRows_(sheet);
+  var event = null;
+  for (var i = 0; i < events.length; i++) {
+    if (String(events[i].id) === eventId) {
+      event = events[i];
+      break;
+    }
+  }
+  if (!event) throw new Error('That show is no longer available.');
+  if (event.archived === true || String(event.archived).toUpperCase() === 'TRUE' ||
+      event.canceled === true || String(event.canceled).toUpperCase() === 'TRUE') {
+    throw new Error('That show is no longer available.');
+  }
+
+  var max = Number(event.max) || 0;
+  var reserved = Number(event.reserved) || 0;
+  var scanned = Number(event.scanned) || 0;
+  var available = Math.max(0, max - reserved - scanned);
+  if (count > available) {
+    throw new Error(available > 0
+      ? 'Only ' + available + ' seat(s) remain for this show.'
+      : 'This show is sold out.');
+  }
+
+  event.reserved = reserved + count;
+  writeRows_(sheet, events);
+
+  var emailData = payload.emailData || {};
+  var emailSent = false;
+  try {
+    emailSent = sendReservationEmail_(payload, event, emailData, count);
+  } catch (err) {
+    // Keep the confirmed reservation even if email delivery is unavailable.
+    emailSent = false;
+  }
+
+  return {
+    success: true,
+    action: 'reserve_seats',
+    reserved: event.reserved,
+    emailSent: emailSent
+  };
+}
+
+function sendReservationEmail_(payload, event, emailData, count) {
+  var email = String(emailData.email || '').trim();
+  if (!email || email.indexOf('@') === -1) return false;
+
+  var name = String(emailData.name || 'Guest');
+  var title = String(emailData.showTitle || event.title || 'Planetarium Show');
+  var showDate = String(emailData.showDate || '');
+  var ticketUrl = String(emailData.ticketUrl || '');
+  if (!ticketUrl && payload.publicAppUrl) {
+    ticketUrl = String(payload.publicAppUrl) +
+      '?ticket=' + encodeURIComponent(event.id) +
+      '&name=' + encodeURIComponent(name) +
+      '&title=' + encodeURIComponent(title) +
+      '&date=' + encodeURIComponent(event.date || '') +
+      '&time=' + encodeURIComponent(event.time || '') +
+      '&count=' + encodeURIComponent(count);
+  }
+
+  MailApp.sendEmail(
+    email,
+    'Your Planetarium Tickets — ' + title,
+    'Hi ' + name + ',\n\n' +
+    'Your reservation is confirmed for ' + count + ' seat(s).\n\n' +
+    title + (showDate ? '\n' + showDate : '') + '\n\n' +
+    'Open your QR ticket wallet here:\n' + ticketUrl + '\n\n' +
+    'Please present the QR tickets to staff at the door.\n\n' +
+    '— Loras College Heitkamp Planetarium'
+  );
+  return true;
+}
+
+// Private group form: append a pending request without replacing other data.
+function handleSubmitBooking_(payload) {
+  var required = ['group', 'contact', 'email', 'date', 'time'];
+  for (var i = 0; i < required.length; i++) {
+    if (!String(payload[required[i]] || '').trim()) {
+      throw new Error('Please complete all required booking fields.');
+    }
+  }
+  var size = Number(payload.size);
+  if (!isFinite(size) || size < 1) throw new Error('The group size is invalid.');
+
+  var sheet = getOrCreateSheet_('Requests', null);
+  var requests = readRows_(sheet);
+  var id = payload.id || Math.floor(Math.random() * 1000000);
+  for (var j = 0; j < requests.length; j++) {
+    if (String(requests[j].id) === String(id)) {
+      return { success: true, action: 'submitBooking', requestId: id, duplicate: true };
+    }
+  }
+
+  requests.push({
+    id: id,
+    group: String(payload.group).trim(),
+    contact: String(payload.contact).trim(),
+    email: String(payload.email).trim(),
+    date: String(payload.date).trim(),
+    time: String(payload.time).trim(),
+    size: size,
+    topics: String(payload.topics || 'General Show').trim(),
+    status: 'pending',
+    reserved: 0,
+    scanned: 0,
+    archived: false,
+    assignments: []
+  });
+  writeRows_(sheet, requests);
+  return { success: true, action: 'submitBooking', requestId: id };
 }
 
 function jsonResponse_(obj) {
@@ -193,7 +336,8 @@ function getOrCreateSheet_(name, headers) {
   return sheet;
 }
 
-// Reads a header-driven sheet into an array of objects.
+// Reads a header-driven sheet into an array of objects. Sheets may coerce
+// date/time strings into Date cells, so return stable values for the web apps.
 function readRows_(sheet) {
   var values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
@@ -206,11 +350,26 @@ function readRows_(sheet) {
       if (!headers[c]) continue;
       var v = values[i][c];
       if (v !== '' && v !== null) empty = false;
-      obj[headers[c]] = v;
+      obj[headers[c]] = formatSheetValue_(v, headers[c]);
     }
     if (!empty) rows.push(obj);
   }
   return rows;
+}
+
+function formatSheetValue_(value, header) {
+  if (Object.prototype.toString.call(value) !== '[object Date]' || isNaN(value.getTime())) {
+    return value;
+  }
+  var timezone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+  var key = String(header || '').trim().toLowerCase();
+  if (key === 'date' || key.slice(-4) === 'date') {
+    return Utilities.formatDate(value, timezone, 'yyyy-MM-dd');
+  }
+  if (key === 'time' || key.slice(-4) === 'time') {
+    return Utilities.formatDate(value, timezone, 'HH:mm');
+  }
+  return Utilities.formatDate(value, 'UTC', "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 }
 
 // Writes an array of objects to a header-driven sheet (headers = union of keys).
